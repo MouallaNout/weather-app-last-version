@@ -1,30 +1,42 @@
 import streamlit as st
-from utils.location_data import get_country_list, get_cities_for_country
+import pandas as pd
+import numpy as np
 from utils.model_helper import load_model, generate_dummy_input
+from countryinfo import CountryInfo
+import pycountry
 
-# ---------- Language Toggle ----------
+# ------------------- Language Toggle -------------------
 lang = st.sidebar.selectbox("Language / اللغة", ["English", "العربية"])
-is_ar = lang == "العربية"
+is_ar = (lang == "العربية")
 
-# ---------- Country and City Dropdown ----------
-country_sel = st.sidebar.selectbox("Select Country" if not is_ar else "اختر الدولة",
-                                   [name for code, name in get_country_list()])
-country_code = [code for code, name in get_country_list() if name == country_sel][0]
-city_list = [city for city, lat, lon in get_cities_for_country(country_code)]
-city_sel = st.sidebar.selectbox("Select City" if not is_ar else "اختر المدينة", city_list)
-lat_lon = {city: (lat, lon) for city, lat, lon in get_cities_for_country(country_code)}
-lat, lon = lat_lon[city_sel]
+# ------------------- Country Dropdown -------------------
+all_countries = [country.name for country in pycountry.countries]
+country_name = st.sidebar.selectbox("Select Country" if not is_ar else "اختر الدولة", sorted(all_countries))
 
-# ---------- Prediction Button ----------
-if st.sidebar.button("Predict" if not is_ar else "تنبؤ"):
+# ------------------- Province/State Dropdown -------------------
+try:
+    country_info = CountryInfo(country_name)
+    provinces = country_info.provinces()
+except:
+    provinces = []
+
+if provinces:
+    city_name = st.sidebar.selectbox("Select State/Province" if not is_ar else "اختر المنطقة/الولاية", sorted(provinces))
+else:
+    city_name = st.sidebar.text_input("Enter City Name" if not is_ar else "أدخل اسم المدينة")
+
+# ------------------- Prediction Button -------------------
+if st.button("Start Prediction" if not is_ar else "ابدأ التوقع"):
+    # Load model
     model = load_model("model/temperature_model.pkl")
-    X_dummy = generate_dummy_input()  # Replace later with real input
-    prediction = model.predict(X_dummy)[0]
+    X_input = generate_dummy_input()
+    prediction = model.predict(X_input)[0]
 
-    # ---------- Display Result ----------
+    # Show result
     st.title("Weather Prediction" if not is_ar else "توقع الطقس")
-    st.subheader(f"{'City' if not is_ar else 'المدينة'}: {city_sel}")
-    st.write(f"{'Predicted Temperature' if not is_ar else 'درجة الحرارة المتوقعة'}: 🌡️ {prediction:.1f}°C")
+    st.subheader(f"{city_name}, {country_name}")
+    st.write(f"{'Predicted Temperature' if not is_ar else 'درجة الحرارة المتوقعة'}: 🌡️ {round(prediction, 1)}°C")
 
+    # Footer
     st.markdown("---")
-    st.caption("Powered by Streamlit & Machine Learning")
+    st.caption("Powered by Streamlit • Weather ML Demo")
