@@ -1,6 +1,7 @@
 streamlit
-geonamescache
-scikit-learn
-numpy
 pandas
+numpy
+scikit-learn
 joblib
+pycountry
+countryinfo
