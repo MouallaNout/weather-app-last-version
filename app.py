@@ -48,6 +48,7 @@ if provinces:
 else:
     city_name = st.sidebar.text_input("أدخل اسم المدينة" if is_ar else "Enter City Name")
 
+
 # ------------------- زر التوقع -------------------
 predict = st.sidebar.button("ابدأ التوقع" if is_ar else "Start Prediction")
 
