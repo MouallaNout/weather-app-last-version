@@ -1,5 +1,6 @@
 streamlit
+geonamescache
 scikit-learn
-pandas
 numpy
-matplotlib
+pandas
+joblib
