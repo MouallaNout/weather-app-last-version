@@ -1,30 +1,29 @@
-import streamlit as st
+import pandas as pd
 import numpy as np
-from utils.model_helper import load_model, generate_dummy_input
+from sklearn.linear_model import LinearRegression
+import joblib
 
-# ------------------- Language Toggle -------------------
-lang = st.sidebar.selectbox("Language / اللغة", ["English", "العربية"])
-is_ar = (lang == "العربية")
+# Load cleaned dataset
+df = pd.read_csv("nyc_hourly_cleaned.csv")
+df["datetime"] = pd.to_datetime(df["datetime"])
 
-# ------------------- Country/City Dropdown -------------------
-cities = {
-    "USA": {"New York": (40.71, -74.01), "Los Angeles": (34.05, -118.24)},
-    "Saudi Arabia": {"Riyadh": (24.71, 46.67), "Jeddah": (21.54, 39.17)}
-}
+# Create features from past 24 hours
+look_back = 24
+target = "temperature"
 
-country = st.sidebar.selectbox("Select Country" if not is_ar else "اختر الدولة", list(cities.keys()))
-city = st.sidebar.selectbox("Select City" if not is_ar else "اختر المدينة", list(cities[country].keys()))
-lat, lon = cities[country][city]
+X, y = [], []
+data = df[[target]].values
+for i in range(len(data) - look_back):
+    X.append(data[i:i+look_back].flatten())
+    y.append(data[i+look_back][0])
 
-# ------------------- Load and Run Model -------------------
-model = load_model()
-input_data = generate_dummy_input()  # replace this later with real inputs
-prediction = model.predict(input_data)[0]
+X = np.array(X)
+y = np.array(y)
 
-# ------------------- Display -------------------
-st.title("Weather Prediction" if not is_ar else "توقع الطقس")
-st.subheader(f"{'City' if not is_ar else 'المدينة'}: {city}")
-st.write(f"{'Predicted Temperature' if not is_ar else 'درجة الحرارة المتوقعة'}: 🌡️ {round(prediction, 2)}°C")
+# Train simple model
+model = LinearRegression()
+model.fit(X, y)
 
-st.markdown("---")
-st.caption("Powered by Streamlit • Weather ML Demo")
+# Save the model
+joblib.dump(model, "model/temperature_model.pkl")
+print("✅ Model saved!")
