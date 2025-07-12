@@ -9,4 +9,5 @@ Streamlit app that predicts weather temperature using a machine learning model.
 
 ## Run locally
 ```bash
-streamlit run app.py
+streamlit run train_model.py
+
