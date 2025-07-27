@@ -1,0 +1,9 @@
+matplotlib
+streamlit
+pandas
+numpy
+scikit-learn
+xgboost
+requests
+countryinfo
+pycountry
