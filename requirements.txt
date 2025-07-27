@@ -1,9 +1,7 @@
-matplotlib
 streamlit
 pandas
 numpy
+requests
+matplotlib
 scikit-learn
 xgboost
-requests
-countryinfo
-pycountry
