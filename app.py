@@ -17,10 +17,26 @@ is_ar = lang == "العربية"
 title = "توقع الطقس باستخدام الذكاء الاصطناعي" if is_ar else "AI-Based Weather Forecast"
 st.title(title)
 
-# ---------------------- إدخال الموقع ----------------------
-st.sidebar.markdown("### 📍 " + ("أدخل الإحداثيات" if is_ar else "Enter Coordinates"))
-lat = st.sidebar.number_input("خط العرض Latitude", value=24.71 if is_ar else 40.71, format="%.4f")
-lon = st.sidebar.number_input("خط الطول Longitude", value=46.67 if is_ar else -74.01, format="%.4f")
+# ---------------------- اختيار الدولة والمدينة ----------------------
+city_coords = {
+    "USA": {
+        "New York": (40.71, -74.01),
+        "Los Angeles": (34.05, -118.24)
+    },
+    "Saudi Arabia": {
+        "Riyadh": (24.7136, 46.6753),
+        "Jeddah": (21.4858, 39.1925)
+    },
+    "Germany": {
+        "Berlin": (52.52, 13.4050),
+        "Munich": (48.1351, 11.5820)
+    }
+}
+
+st.sidebar.markdown("### 🌍 " + ("اختر الدولة والمدينة" if is_ar else "Select Country and City"))
+country = st.sidebar.selectbox("الدولة" if is_ar else "Country", list(city_coords.keys()))
+city = st.sidebar.selectbox("المدينة" if is_ar else "City", list(city_coords[country].keys()))
+lat, lon = city_coords[country][city]
 
 if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
     with st.spinner("🔄 " + ("جاري تحميل البيانات..." if is_ar else "Fetching weather data...")):
