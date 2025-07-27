@@ -1,66 +1,129 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from utils.model_helper import load_model, generate_dummy_input
-from countryinfo import CountryInfo
-import pycountry
+import requests
+import time
+import matplotlib.pyplot as plt
+from sklearn.linear_model import LinearRegression
+from sklearn.svm import SVR
+from sklearn.metrics import mean_absolute_error
+from sklearn.model_selection import train_test_split
+import xgboost as xgb
 
-# ------------------- اللغة -------------------
+# ---------------------- إعداد اللغة ----------------------
 lang = st.sidebar.selectbox("Language / اللغة", ["English", "العربية"])
-is_ar = (lang == "العربية")
-lang_code = "ar" if is_ar else "en"
+is_ar = lang == "العربية"
 
-# ------------------- جميع الدول بأسمائها المحلية -------------------
-def get_country_display_name(country):
-    try:
-        name_translations = pycountry.countries.get(name=country)
-        if name_translations and hasattr(name_translations, 'translations'):
-            return name_translations.translations.get(lang_code, country)
-    except:
-        pass
-    return country
+title = "توقع الطقس باستخدام الذكاء الاصطناعي" if is_ar else "AI-Based Weather Forecast"
+st.title(title)
 
-# قائمة الدول (عرض مترجم فقط)
-all_countries = sorted([country.name for country in pycountry.countries])
-translated_countries = [get_country_display_name(name) for name in all_countries]
-country_map = dict(zip(translated_countries, all_countries))
+# ---------------------- إدخال الموقع ----------------------
+st.sidebar.markdown("### 📍 " + ("أدخل الإحداثيات" if is_ar else "Enter Coordinates"))
+lat = st.sidebar.number_input("خط العرض Latitude", value=24.71 if is_ar else 40.71, format="%.4f")
+lon = st.sidebar.number_input("خط الطول Longitude", value=46.67 if is_ar else -74.01, format="%.4f")
 
-# اختيار الدولة
-display_country = st.sidebar.selectbox("اختر الدولة" if is_ar else "Select Country", translated_countries)
-country_name = country_map[display_country]
+if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
+    with st.spinner("🔄 " + ("جاري تحميل البيانات..." if is_ar else "Fetching weather data...")):
+        # ---------------------- جلب البيانات ----------------------
+        start_str = "2023-01-01"
+        end_str = "2024-12-31"
+        api_url = (
+            f"https://archive-api.open-meteo.com/v1/archive?"
+            f"latitude={lat}&longitude={lon}"
+            f"&start_date={start_str}&end_date={end_str}"
+            f"&hourly=temperature_2m,relative_humidity_2m,windspeed_10m"
+            f"&timezone=auto"
+        )
 
-# ------------------- عرض الولايات/المدن -------------------
-try:
-    country_info = CountryInfo(country_name)
-    provinces = country_info.provinces()
-except:
-    provinces = []
+        try:
+            resp = requests.get(api_url)
+            resp.raise_for_status()
+            data = resp.json()
 
-if provinces:
-    city_options = sorted(provinces)
-    city_selected = st.sidebar.selectbox("اختر الولاية / المدينة" if is_ar else "Select State / City", city_options)
+            df = pd.DataFrame({
+                "datetime": pd.to_datetime(data["hourly"]["time"]),
+                "temperature": data["hourly"]["temperature_2m"],
+                "humidity": data["hourly"]["relative_humidity_2m"],
+                "wind_speed": data["hourly"]["windspeed_10m"]
+            })
+        except Exception as e:
+            st.error("فشل تحميل البيانات. تأكد من الاتصال بالإنترنت." if is_ar else f"Failed to fetch data: {e}")
+            st.stop()
 
-    # إظهار الاسم العربي أو الإنجليزي حسب اللغة
-    if is_ar:
-        city_name = city_selected  # نعرض الاسم كما هو
-    else:
-        city_name = city_selected  # نعرض الاسم كما هو (بدون تغيير حالياً)
-else:
-    city_name = st.sidebar.text_input("أدخل اسم المدينة" if is_ar else "Enter City Name")
+    # ---------------------- تنظيف وتصحيح البيانات ----------------------
+    df_original = df.copy()
+    for col, cond in [
+        ("temperature", (df["temperature"] < -60) | (df["temperature"] > 60)),
+        ("humidity", (df["humidity"] < 0) | (df["humidity"] > 100)),
+        ("wind_speed", (df["wind_speed"] < 0) | (df["wind_speed"] > 60))
+    ]:
+        for idx in df[cond].index:
+            if 0 < idx < len(df) - 1:
+                df.loc[idx, col] = (df.loc[idx - 1, col] + df.loc[idx + 1, col]) / 2
 
+    for col in ["temperature", "humidity", "wind_speed"]:
+        df[col] = df[col].apply(lambda x: int(x + 0.5))
 
-# ------------------- زر التوقع -------------------
-predict = st.sidebar.button("ابدأ التوقع" if is_ar else "Start Prediction")
+    # ---------------------- تجهيز البيانات للنمذجة ----------------------
+    look_back = 72
+    target = "temperature"
+    X, y = [], []
+    data = df[[target]].values
 
-# ------------------- النتيجة -------------------
-if predict:
-    model = load_model("model/temperature_model.pkl")
-    X_input = generate_dummy_input()
-    prediction = model.predict(X_input)[0]
+    for i in range(len(data) - look_back):
+        X.append(data[i:i+look_back].flatten())
+        y.append(data[i+look_back][0])
+    X, y = np.array(X), np.array(y)
 
-    st.title("توقع الطقس" if is_ar else "Weather Prediction")
-    st.subheader(f"{city_name}, {display_country}")
-    st.write(f"{'درجة الحرارة المتوقعة' if is_ar else 'Predicted Temperature'}: 🌡️ {round(prediction, 1)}°C")
+    if len(X) == 0:
+        st.warning("البيانات غير كافية للتدريب." if is_ar else "Not enough data to train.")
+        st.stop()
 
-    st.markdown("---")
-    st.caption("تم التطوير باستخدام Streamlit • Weather ML Demo")
+    X_train, X_test, y_train, y_test = train_test_split(X, y, shuffle=False, test_size=0.2)
+
+    models = {
+        "Linear Regression": LinearRegression(),
+        "SVR": SVR(),
+        "XGBoost": xgb.XGBRegressor(objective="reg:squarederror", random_state=42)
+    }
+
+    # ---------------------- تدريب النماذج ----------------------
+    results = {}
+    times = {}
+    predictions = []
+
+    for name, model in models.items():
+        start = time.time()
+        model.fit(X_train, y_train)
+        pred = model.predict(X_test)
+        elapsed = time.time() - start
+        mae = mean_absolute_error(y_test, pred)
+
+        results[name] = mae
+        times[name] = elapsed
+        predictions.append(pred)
+
+    # ---------------------- التنبؤ النهائي ----------------------
+    final_prediction = np.mean(predictions, axis=0)
+    final_mae = mean_absolute_error(y_test, final_prediction)
+
+    results["Ensemble Average"] = final_mae
+    times["Ensemble Average"] = 0
+
+    df_results = pd.DataFrame({
+        "MAE": results,
+        "Time (s)": times
+    })
+
+    # ---------------------- عرض النتائج ----------------------
+    st.success("✅ تم تنفيذ التوقع!" if is_ar else "✅ Prediction complete!")
+
+    st.markdown("### ⚙️ نتائج النماذج" if is_ar else "### ⚙️ Model Performance")
+    st.dataframe(df_results.style.format({"MAE": "{:.2f}", "Time (s)": "{:.2f}"}))
+
+    # ---------------------- رسم النتائج ----------------------
+    st.markdown("### 📊 المقارنة بين النماذج" if is_ar else "### 📊 Model Comparison")
+    st.bar_chart(df_results["MAE"])
+
+    st.markdown("### ⏱️ الزمن المستغرق في التدريب" if is_ar else "### ⏱️ Training Time")
+    st.bar_chart(df_results.drop(index="Ensemble Average")["Time (s)"])
