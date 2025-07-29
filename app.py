@@ -8,7 +8,6 @@ from sklearn.linear_model import LinearRegression
 from sklearn.svm import SVR
 from sklearn.metrics import mean_absolute_error
 from sklearn.model_selection import train_test_split
-import xgboost as xgb
 
 # 🗣 Language Option
 lang = st.sidebar.selectbox("Language / اللغة", ["English", "العربية"])
@@ -77,8 +76,7 @@ if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
     # 🤖 Models
     models = {
         "Linear Regression": LinearRegression(),
-        "SVR": SVR(),
-        "XGBoost": xgb.XGBRegressor(objective="reg:squarederror", random_state=42)
+        "SVR": SVR()
     }
 
     results = {}
