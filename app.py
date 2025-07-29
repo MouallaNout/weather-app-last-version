@@ -56,12 +56,31 @@ if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
             resp.raise_for_status()
             data = resp.json()
 
+            # ✅ Check API structure
+            hourly = data.get("hourly", {})
+            if not hourly:
+                st.error("❌ لا توجد بيانات متاحة لهذه المدينة." if is_ar else "❌ No hourly data available.")
+                st.stop()
+
+            required_keys = ["time", "temperature_2m", "relative_humidity_2m", "windspeed_10m"]
+            for key in required_keys:
+                if key not in hourly:
+                    st.error(f"❌ Missing key in API response: {key}")
+                    st.stop()
+
             df = pd.DataFrame({
-                "datetime": pd.to_datetime(data["hourly"]["time"]),
-                "temperature": data["hourly"]["temperature_2m"],
-                "humidity": data["hourly"]["relative_humidity_2m"],
-                "wind_speed": data["hourly"]["windspeed_10m"]
+                "datetime": pd.to_datetime(hourly["time"]),
+                "temperature": hourly["temperature_2m"],
+                "humidity": hourly["relative_humidity_2m"],
+                "wind_speed": hourly["windspeed_10m"]
             })
+
+            if df.empty:
+                st.error("❌ البيانات المستلمة فارغة." if is_ar else "❌ Empty data received.")
+                st.stop()
+
+            st.write("✅ البيانات تم تحميلها بنجاح!" if is_ar else "✅ Weather data loaded successfully!")
+
         except Exception as e:
             st.error("فشل تحميل البيانات. تأكد من الاتصال بالإنترنت." if is_ar else f"Failed to fetch data: {e}")
             st.stop()
