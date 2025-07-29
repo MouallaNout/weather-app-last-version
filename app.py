@@ -41,6 +41,7 @@ lat, lon = city_coords[country][city]
 if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
     with st.spinner("🔄 " + ("جاري تحميل البيانات..." if is_ar else "Fetching weather data...")):
         st.write("📡 Connecting to weather API...")
+
         start_str = "2023-01-01"
         end_str = "2024-12-31"
         api_url = (
@@ -56,36 +57,20 @@ if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
             resp.raise_for_status()
             data = resp.json()
 
-            # ✅ Check API structure
-            hourly = data.get("hourly", {})
-            if not hourly:
-                st.error("❌ لا توجد بيانات متاحة لهذه المدينة." if is_ar else "❌ No hourly data available.")
-                st.stop()
-
-            required_keys = ["time", "temperature_2m", "relative_humidity_2m", "windspeed_10m"]
-            for key in required_keys:
-                if key not in hourly:
-                    st.error(f"❌ Missing key in API response: {key}")
-                    st.stop()
-
             df = pd.DataFrame({
-                "datetime": pd.to_datetime(hourly["time"]),
-                "temperature": hourly["temperature_2m"],
-                "humidity": hourly["relative_humidity_2m"],
-                "wind_speed": hourly["windspeed_10m"]
+                "datetime": pd.to_datetime(data["hourly"]["time"]),
+                "temperature": data["hourly"]["temperature_2m"],
+                "humidity": data["hourly"]["relative_humidity_2m"],
+                "wind_speed": data["hourly"]["windspeed_10m"]
             })
-
-            if df.empty:
-                st.error("❌ البيانات المستلمة فارغة." if is_ar else "❌ Empty data received.")
-                st.stop()
-
-            st.write("✅ البيانات تم تحميلها بنجاح!" if is_ar else "✅ Weather data loaded successfully!")
-
+            st.success("✅ Weather data loaded successfully!" if not is_ar else "✅ تم تحميل بيانات الطقس بنجاح!")
+            st.write("📊 Raw data shape:", df.shape)
         except Exception as e:
             st.error("فشل تحميل البيانات. تأكد من الاتصال بالإنترنت." if is_ar else f"Failed to fetch data: {e}")
             st.stop()
 
     # ---------------------- Clean Data ----------------------
+    st.write("🧹 Cleaning data...")
     df_original = df.copy()
     for col, cond in [
         ("temperature", (df["temperature"] < -60) | (df["temperature"] > 60)),
@@ -99,6 +84,8 @@ if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
     for col in ["temperature", "humidity", "wind_speed"]:
         df[col] = df[col].apply(lambda x: int(x + 0.5))
 
+    st.write("✅ Step 1: Data cleaned")
+
     # ---------------------- Feature Engineering ----------------------
     look_back = 72
     target = "temperature"
@@ -108,12 +95,15 @@ if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
         X.append(data[i:i+look_back].flatten())
         y.append(data[i+look_back][0])
     X, y = np.array(X), np.array(y)
+    st.write(f"✅ Step 2: Features prepared. X shape = {X.shape}, y shape = {y.shape}")
 
     if len(X) == 0:
         st.warning("البيانات غير كافية للتدريب." if is_ar else "Not enough data to train.")
         st.stop()
 
+    # ---------------------- Split ----------------------
     X_train, X_test, y_train, y_test = train_test_split(X, y, shuffle=False, test_size=0.2)
+    st.write("✅ Step 3: Data split into training/testing")
 
     # ---------------------- Train Models ----------------------
     models = {
@@ -127,22 +117,32 @@ if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
     predictions = []
 
     for name, model in models.items():
-        start = time.time()
-        model.fit(X_train, y_train)
-        pred = model.predict(X_test)
-        elapsed = time.time() - start
-        mae = mean_absolute_error(y_test, pred)
+        st.write(f"🔄 Training model: {name}")
+        try:
+            start = time.time()
+            model.fit(X_train, y_train)
+            pred = model.predict(X_test)
+            elapsed = time.time() - start
+            mae = mean_absolute_error(y_test, pred)
 
-        results[name] = mae
-        times[name] = elapsed
-        predictions.append(pred)
+            results[name] = mae
+            times[name] = elapsed
+            predictions.append(pred)
+            st.write(f"✅ {name} MAE: {mae:.3f}, Time: {elapsed:.2f}s")
+        except Exception as e:
+            st.error(f"❌ Error training {name}: {e}")
 
     # ---------------------- Final Ensemble ----------------------
-    final_prediction = np.mean(predictions, axis=0)
-    final_mae = mean_absolute_error(y_test, final_prediction)
+    if predictions:
+        final_prediction = np.mean(predictions, axis=0)
+        final_mae = mean_absolute_error(y_test, final_prediction)
 
-    results["Ensemble Average"] = final_mae
-    times["Ensemble Average"] = 0
+        results["Ensemble Average"] = final_mae
+        times["Ensemble Average"] = 0
+        st.write("✅ Final ensemble prediction complete")
+    else:
+        st.error("❌ No model predictions available. Training might have failed.")
+        st.stop()
 
     df_results = pd.DataFrame({
         "MAE": results,
