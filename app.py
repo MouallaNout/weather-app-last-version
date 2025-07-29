@@ -10,13 +10,13 @@ from sklearn.metrics import mean_absolute_error
 from sklearn.model_selection import train_test_split
 import xgboost as xgb
 
-# ---------------------- Language Setup ----------------------
+# ---------------------- إعداد اللغة ----------------------
 lang = st.sidebar.selectbox("Language / اللغة", ["English", "العربية"])
 is_ar = lang == "العربية"
 title = "توقع الطقس باستخدام الذكاء الاصطناعي" if is_ar else "AI-Based Weather Forecast"
 st.title(title)
 
-# ---------------------- Country/City Dropdown ----------------------
+# ---------------------- اختيار الدولة والمدينة ----------------------
 city_coords = {
     "USA": {
         "New York": (40.71, -74.01),
@@ -37,11 +37,10 @@ country = st.sidebar.selectbox("الدولة" if is_ar else "Country", list(city
 city = st.sidebar.selectbox("المدينة" if is_ar else "City", list(city_coords[country].keys()))
 lat, lon = city_coords[country][city]
 
-# ---------------------- Prediction Button ----------------------
+# ---------------------- زر التنبؤ ----------------------
 if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
     with st.spinner("🔄 " + ("جاري تحميل البيانات..." if is_ar else "Fetching weather data...")):
         st.write("📡 Connecting to weather API...")
-
         start_str = "2023-01-01"
         end_str = "2024-12-31"
         api_url = (
@@ -63,14 +62,14 @@ if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
                 "humidity": data["hourly"]["relative_humidity_2m"],
                 "wind_speed": data["hourly"]["windspeed_10m"]
             })
-            st.success("✅ Weather data loaded successfully!" if not is_ar else "✅ تم تحميل بيانات الطقس بنجاح!")
+            st.success("✅ تم تحميل بيانات الطقس!" if is_ar else "✅ Weather data loaded successfully!")
             st.write("📊 Raw data shape:", df.shape)
         except Exception as e:
             st.error("فشل تحميل البيانات. تأكد من الاتصال بالإنترنت." if is_ar else f"Failed to fetch data: {e}")
             st.stop()
 
-    # ---------------------- Clean Data ----------------------
-    st.write("🧹 Cleaning data...")
+    # ---------------------- تنظيف البيانات ----------------------
+    st.write("🪄 Cleaning data...")
     df_original = df.copy()
     for col, cond in [
         ("temperature", (df["temperature"] < -60) | (df["temperature"] > 60)),
@@ -84,9 +83,9 @@ if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
     for col in ["temperature", "humidity", "wind_speed"]:
         df[col] = df[col].apply(lambda x: int(x + 0.5))
 
-    st.write("✅ Step 1: Data cleaned")
+    st.success("✅ Step 1: Data cleaned")
 
-    # ---------------------- Feature Engineering ----------------------
+    # ---------------------- التجهيز للنماذج ----------------------
     look_back = 72
     target = "temperature"
     X, y = [], []
@@ -95,17 +94,24 @@ if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
         X.append(data[i:i+look_back].flatten())
         y.append(data[i+look_back][0])
     X, y = np.array(X), np.array(y)
-    st.write(f"✅ Step 2: Features prepared. X shape = {X.shape}, y shape = {y.shape}")
+
+    st.success(f"✅ Step 2: Features prepared. X shape = {X.shape}, y shape = {y.shape}")
 
     if len(X) == 0:
         st.warning("البيانات غير كافية للتدريب." if is_ar else "Not enough data to train.")
         st.stop()
 
-    # ---------------------- Split ----------------------
     X_train, X_test, y_train, y_test = train_test_split(X, y, shuffle=False, test_size=0.2)
-    st.write("✅ Step 3: Data split into training/testing")
 
-    # ---------------------- Train Models ----------------------
+    # Ensure float32 for XGBoost
+    X_train = X_train.astype(np.float32)
+    X_test = X_test.astype(np.float32)
+    y_train = y_train.astype(np.float32)
+    y_test = y_test.astype(np.float32)
+
+    st.success("✅ Step 3: Data split into training/testing")
+
+    # ---------------------- تدريب النماذج ----------------------
     models = {
         "Linear Regression": LinearRegression(),
         "SVR": SVR(),
@@ -117,8 +123,8 @@ if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
     predictions = []
 
     for name, model in models.items():
-        st.write(f"🔄 Training model: {name}")
         try:
+            st.info(f"🧠 Training model: {name}")
             start = time.time()
             model.fit(X_train, y_train)
             pred = model.predict(X_test)
@@ -128,29 +134,30 @@ if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
             results[name] = mae
             times[name] = elapsed
             predictions.append(pred)
-            st.write(f"✅ {name} MAE: {mae:.3f}, Time: {elapsed:.2f}s")
+
+            st.success(f"✅ {name} MAE: {mae:.3f}, Time: {elapsed:.2f}s")
         except Exception as e:
             st.error(f"❌ Error training {name}: {e}")
 
-    # ---------------------- Final Ensemble ----------------------
-    if predictions:
-        final_prediction = np.mean(predictions, axis=0)
-        final_mae = mean_absolute_error(y_test, final_prediction)
-
-        results["Ensemble Average"] = final_mae
-        times["Ensemble Average"] = 0
-        st.write("✅ Final ensemble prediction complete")
-    else:
-        st.error("❌ No model predictions available. Training might have failed.")
+    if not predictions:
+        st.error("❌ No predictions were successful.")
         st.stop()
+
+    # ---------------------- Ensemble ----------------------
+    st.info("🔄 Creating ensemble average...")
+    final_prediction = np.mean(predictions, axis=0)
+    final_mae = mean_absolute_error(y_test, final_prediction)
+
+    results["Ensemble Average"] = final_mae
+    times["Ensemble Average"] = 0
 
     df_results = pd.DataFrame({
         "MAE": results,
         "Time (s)": times
     })
 
-    # ---------------------- Display ----------------------
-    st.success("✅ تم تنفيذ التوقع!" if is_ar else "✅ Prediction complete!")
+    # ---------------------- عرض النتائج ----------------------
+    st.success("✅ All models trained and evaluated.")
 
     st.markdown("### ⚙️ نتائج النماذج" if is_ar else "### ⚙️ Model Performance")
     st.dataframe(df_results.style.format({"MAE": "{:.2f}", "Time (s)": "{:.2f}"}))
