@@ -1,18 +1,22 @@
+import streamlit as st
 import pandas as pd
 import numpy as np
 import requests
-import streamlit as st
+import time
+from datetime import date, timedelta
 import matplotlib.pyplot as plt
-from datetime import datetime, timedelta
 from sklearn.linear_model import LinearRegression
 from sklearn.svm import SVR
+from sklearn.metrics import mean_absolute_error
+from sklearn.model_selection import train_test_split
 
-# 🗣 Language Option
+# إعداد اللغة
 lang = st.sidebar.selectbox("Language / اللغة", ["English", "العربية"])
 is_ar = lang == "العربية"
-st.title("توقع طقس الغد بالذكاء الاصطناعي" if is_ar else "AI-Powered Tomorrow's Weather Forecast")
+title = "توقع الطقس باستخدام الذكاء الاصطناعي" if is_ar else "AI-Based Weather Forecast"
+st.title(title)
 
-# 🌍 City Coordinates
+# اختيار الدولة والمدينة
 city_coords = {
     "USA": {
         "New York": (40.71, -74.01),
@@ -28,81 +32,108 @@ city_coords = {
     }
 }
 
-# 📍 User Input
+st.sidebar.markdown("### 🌍 " + ("اختر الدولة والمدينة" if is_ar else "Select Country and City"))
 country = st.sidebar.selectbox("الدولة" if is_ar else "Country", list(city_coords.keys()))
 city = st.sidebar.selectbox("المدينة" if is_ar else "City", list(city_coords[country].keys()))
 lat, lon = city_coords[country][city]
 
-if st.sidebar.button("ابدأ التوقع" if is_ar else "Start Forecast"):
-    with st.spinner("🔄 جاري تحميل بيانات آخر سنتين..." if is_ar else "Fetching last 2 years of data..."):
-        today = datetime.today().date()
-        start_date = (today - timedelta(days=730)).strftime("%Y-%m-%d")
-        end_date = today.strftime("%Y-%m-%d")
-
+# زر التنبؤ
+if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
+    with st.spinner("🔄 " + ("جاري تحميل البيانات..." if is_ar else "Fetching weather data...")):
+        start_date = (date.today() - timedelta(days=730)).isoformat()
+        end_date = date.today().isoformat()
         api_url = (
             f"https://archive-api.open-meteo.com/v1/archive?"
-            f"latitude={lat}&longitude={lon}&start_date={start_date}&end_date={end_date}"
-            f"&hourly=temperature_2m,relative_humidity_2m,windspeed_10m&timezone=auto"
+            f"latitude={lat}&longitude={lon}"
+            f"&start_date={start_date}&end_date={end_date}"
+            f"&hourly=temperature_2m,relative_humidity_2m,windspeed_10m"
+            f"&timezone=auto"
         )
 
         try:
             response = requests.get(api_url)
+            response.raise_for_status()
             data = response.json()
+
             df = pd.DataFrame({
                 "datetime": pd.to_datetime(data["hourly"]["time"]),
                 "temperature": data["hourly"]["temperature_2m"],
                 "humidity": data["hourly"]["relative_humidity_2m"],
                 "wind_speed": data["hourly"]["windspeed_10m"]
             })
-        except:
-            st.error("فشل تحميل البيانات!" if is_ar else "Failed to fetch data!")
+        except Exception as e:
+            st.error("فشل تحميل البيانات." if is_ar else f"Failed to fetch data: {e}")
             st.stop()
 
-    # 🧹 Clean
+    # معالجة القيم المفقودة بطريقة المتوسط بين الجارتين
+    def fill_with_avg_of_neighbors(series):
+        series = series.copy()
+        for i in range(1, len(series) - 1):
+            if pd.isna(series[i]) and not pd.isna(series[i - 1]) and not pd.isna(series[i + 1]):
+                series[i] = (series[i - 1] + series[i + 1]) / 2
+        return series
+
     for col in ["temperature", "humidity", "wind_speed"]:
+        df[col] = fill_with_avg_of_neighbors(df[col])
+        df[col] = df[col].fillna(method="ffill").fillna(method="bfill")
         df[col] = df[col].apply(lambda x: int(x + 0.5))
 
-    # 🎯 Prepare Data
-    look_back = 72  # 72 ساعة (3 أيام)
-    data = df[["temperature"]].values
+    # تجهيز البيانات للنمذجة
+    look_back = 72
+    target = "temperature"
     X, y = [], []
-    for i in range(len(data) - look_back):
-        X.append(data[i:i + look_back].flatten())
-        y.append(data[i + look_back][0])
+    data_arr = df[[target]].values
+    for i in range(len(data_arr) - look_back):
+        X.append(data_arr[i:i+look_back].flatten())
+        y.append(data_arr[i+look_back][0])
     X, y = np.array(X), np.array(y)
 
     if len(X) == 0:
         st.warning("البيانات غير كافية للتدريب." if is_ar else "Not enough data to train.")
         st.stop()
 
-    # 🔮 Use last 72 hours to predict tomorrow
-    last_72_hours = data[-look_back:].flatten().reshape(1, -1)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, shuffle=False, test_size=0.2)
 
-    # 🤖 Models
     models = {
         "Linear Regression": LinearRegression(),
         "SVR": SVR()
     }
 
-    predictions = {}
+    results = {}
+    times = {}
+    predictions = []
+
     for name, model in models.items():
-        model.fit(X, y)
-        pred = model.predict(last_72_hours)[0]
-        predictions[name] = pred
+        start = time.time()
+        model.fit(X_train, y_train)
+        pred = model.predict(X_test)
+        elapsed = time.time() - start
+        mae = mean_absolute_error(y_test, pred)
 
-    ensemble_prediction = np.mean(list(predictions.values()))
+        results[name] = mae
+        times[name] = elapsed
+        predictions.append(pred)
 
-    # ✅ Show Forecast
-    st.markdown("## ☀️ " + ("توقع درجة حرارة الغد" if is_ar else "Tomorrow's Temperature Forecast"))
-    st.success(
-        f"📍 **{city}, {country}**\n\n"
-        f"📅 {today + timedelta(days=1)}\n\n"
-        f"🌡️ **{ensemble_prediction:.1f} °C** (تقدير متوسط)" if is_ar else
-        f"📍 **{city}, {country}**\n\n"
-        f"📅 {today + timedelta(days=1)}\n\n"
-        f"🌡️ **{ensemble_prediction:.1f} °C** (Ensemble Estimate)"
-    )
+    # توقع الغد
+    last_sequence = df[[target]].values[-look_back:].flatten().reshape(1, -1)
+    tomorrow_preds = [model.predict(last_sequence)[0] for model in models.values()]
+    tomorrow_temp = sum(tomorrow_preds) / len(tomorrow_preds)
 
-    # Optional: Breakdown
-    st.markdown("### 🤖 " + ("تفاصيل النماذج" if is_ar else "Model Estimates"))
-    st.write(pd.DataFrame(predictions, index=["Predicted Temp (°C)"]).T)
+    # عرض النتائج بشكل مبسط وإنساني
+    st.success("✅ " + ("تم التنبؤ بنجاح!" if is_ar else "Prediction completed!"))
+    st.markdown("---")
+
+    st.subheader("🌤️ " + ("توقع درجة الحرارة ليوم الغد" if is_ar else "Tomorrow's Temperature Forecast"))
+    st.markdown(f"📍 {city}, {country}")
+    st.markdown(f"📅 {date.today() + timedelta(days=1)}")
+    st.markdown(f"🌡️ **{tomorrow_temp:.1f}°C**")
+
+    st.markdown("---")
+    st.subheader("📈 " + ("أداء النماذج" if is_ar else "Model Performance"))
+    perf_df = pd.DataFrame({
+        "MAE": results,
+        "Time (s)": times
+    })
+    st.dataframe(perf_df.style.format({"MAE": "{:.2f}", "Time (s)": "{:.2f}"}))
+
+    st.bar_chart(perf_df["MAE"])
