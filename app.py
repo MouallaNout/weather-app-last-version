@@ -10,14 +10,13 @@ from sklearn.metrics import mean_absolute_error
 from sklearn.model_selection import train_test_split
 import xgboost as xgb
 
-# ---------------------- إعداد اللغة ----------------------
+# ---------------------- Language Setup ----------------------
 lang = st.sidebar.selectbox("Language / اللغة", ["English", "العربية"])
 is_ar = lang == "العربية"
-
 title = "توقع الطقس باستخدام الذكاء الاصطناعي" if is_ar else "AI-Based Weather Forecast"
 st.title(title)
 
-# ---------------------- اختيار الدولة والمدينة ----------------------
+# ---------------------- Country/City Dropdown ----------------------
 city_coords = {
     "USA": {
         "New York": (40.71, -74.01),
@@ -38,9 +37,10 @@ country = st.sidebar.selectbox("الدولة" if is_ar else "Country", list(city
 city = st.sidebar.selectbox("المدينة" if is_ar else "City", list(city_coords[country].keys()))
 lat, lon = city_coords[country][city]
 
+# ---------------------- Prediction Button ----------------------
 if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
     with st.spinner("🔄 " + ("جاري تحميل البيانات..." if is_ar else "Fetching weather data...")):
-        # ---------------------- جلب البيانات ----------------------
+        st.write("📡 Connecting to weather API...")
         start_str = "2023-01-01"
         end_str = "2024-12-31"
         api_url = (
@@ -66,7 +66,7 @@ if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
             st.error("فشل تحميل البيانات. تأكد من الاتصال بالإنترنت." if is_ar else f"Failed to fetch data: {e}")
             st.stop()
 
-    # ---------------------- تنظيف وتصحيح البيانات ----------------------
+    # ---------------------- Clean Data ----------------------
     df_original = df.copy()
     for col, cond in [
         ("temperature", (df["temperature"] < -60) | (df["temperature"] > 60)),
@@ -80,12 +80,11 @@ if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
     for col in ["temperature", "humidity", "wind_speed"]:
         df[col] = df[col].apply(lambda x: int(x + 0.5))
 
-    # ---------------------- تجهيز البيانات للنمذجة ----------------------
+    # ---------------------- Feature Engineering ----------------------
     look_back = 72
     target = "temperature"
     X, y = [], []
     data = df[[target]].values
-
     for i in range(len(data) - look_back):
         X.append(data[i:i+look_back].flatten())
         y.append(data[i+look_back][0])
@@ -97,13 +96,13 @@ if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, shuffle=False, test_size=0.2)
 
+    # ---------------------- Train Models ----------------------
     models = {
         "Linear Regression": LinearRegression(),
         "SVR": SVR(),
         "XGBoost": xgb.XGBRegressor(objective="reg:squarederror", random_state=42)
     }
 
-    # ---------------------- تدريب النماذج ----------------------
     results = {}
     times = {}
     predictions = []
@@ -119,7 +118,7 @@ if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
         times[name] = elapsed
         predictions.append(pred)
 
-    # ---------------------- التنبؤ النهائي ----------------------
+    # ---------------------- Final Ensemble ----------------------
     final_prediction = np.mean(predictions, axis=0)
     final_mae = mean_absolute_error(y_test, final_prediction)
 
@@ -131,13 +130,12 @@ if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
         "Time (s)": times
     })
 
-    # ---------------------- عرض النتائج ----------------------
+    # ---------------------- Display ----------------------
     st.success("✅ تم تنفيذ التوقع!" if is_ar else "✅ Prediction complete!")
 
     st.markdown("### ⚙️ نتائج النماذج" if is_ar else "### ⚙️ Model Performance")
     st.dataframe(df_results.style.format({"MAE": "{:.2f}", "Time (s)": "{:.2f}"}))
 
-    # ---------------------- رسم النتائج ----------------------
     st.markdown("### 📊 المقارنة بين النماذج" if is_ar else "### 📊 Model Comparison")
     st.bar_chart(df_results["MAE"])
 
