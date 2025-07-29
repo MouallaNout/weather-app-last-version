@@ -8,7 +8,6 @@ from sklearn.linear_model import LinearRegression
 from sklearn.svm import SVR
 from sklearn.metrics import mean_absolute_error
 from sklearn.model_selection import train_test_split
-import xgboost as xgb
 
 # ---------------------- إعداد اللغة ----------------------
 lang = st.sidebar.selectbox("Language / اللغة", ["English", "العربية"])
@@ -85,7 +84,7 @@ if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
 
     st.success("✅ Step 1: Data cleaned")
 
-    # ---------------------- التجهيز للنماذج ----------------------
+    # ---------------------- إعداد الميزات ----------------------
     look_back = 72
     target = "temperature"
     X, y = [], []
@@ -103,19 +102,12 @@ if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, shuffle=False, test_size=0.2)
 
-    # Ensure float32 for XGBoost
-    X_train = X_train.astype(np.float32)
-    X_test = X_test.astype(np.float32)
-    y_train = y_train.astype(np.float32)
-    y_test = y_test.astype(np.float32)
-
     st.success("✅ Step 3: Data split into training/testing")
 
     # ---------------------- تدريب النماذج ----------------------
     models = {
         "Linear Regression": LinearRegression(),
-        "SVR": SVR(),
-        "XGBoost": xgb.XGBRegressor(objective="reg:squarederror", random_state=42)
+        "SVR": SVR()
     }
 
     results = {}
