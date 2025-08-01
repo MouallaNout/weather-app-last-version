@@ -127,3 +127,5 @@ if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
     st.markdown(f"📍 {city}, {country}")
     st.markdown(f"📅 {date.today() + timedelta(days=1)}")
     st.line_chart(df_forecast.set_index("Time"))
+    st.dataframe(df_forecast.style.format({"Predicted Temperature (°C)": "{:.1f}"}))
+
