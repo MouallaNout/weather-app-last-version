@@ -129,14 +129,25 @@ if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
         "Wind Speed (km/h)": forecast_results["wind_speed"]
     })
 
-    # العرض
+    # دالة لرسم مخطط بعنوان باستخدام matplotlib
+    def plot_line_chart(df, column, title):
+        fig, ax = plt.subplots()
+        ax.plot(df["Time"], df[column], marker='o')
+        ax.set_title(title)
+        ax.set_xlabel("Time")
+        ax.set_ylabel(column)
+        ax.grid(True)
+        plt.xticks(rotation=45)
+        st.pyplot(fig)
+
+    # عرض النتائج
     st.subheader("🌤️ " + ("توقعات الطقس لكل ساعة غدًا" if is_ar else "Hourly Weather Forecast for Tomorrow"))
     st.markdown(f"📍 {city}, {country}")
     st.markdown(f"📅 {date.today() + timedelta(days=1)}")
 
-    st.line_chart(df_forecast.set_index("Time")[["Temperature (°C)"]])
-    st.line_chart(df_forecast.set_index("Time")[["Humidity (%)"]])
-    st.line_chart(df_forecast.set_index("Time")[["Wind Speed (km/h)"]])
+    plot_line_chart(df_forecast, "Temperature (°C)", "🌡️ " + ("تغير درجة الحرارة" if is_ar else "Temperature Throughout the Day"))
+    plot_line_chart(df_forecast, "Humidity (%)", "💧 " + ("تغير الرطوبة" if is_ar else "Humidity Throughout the Day"))
+    plot_line_chart(df_forecast, "Wind Speed (km/h)", "💨 " + ("تغير سرعة الرياح" if is_ar else "Wind Speed Throughout the Day"))
 
     st.dataframe(df_forecast.style.format({
         "Temperature (°C)": "{:.1f}",
