@@ -55,4 +55,75 @@ if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
             response.raise_for_status()
             data = response.json()
 
-            df = pd.DataFr
+            df = pd.DataFrame({
+                "datetime": pd.to_datetime(data["hourly"]["time"]),
+                "temperature": data["hourly"]["temperature_2m"],
+                "humidity": data["hourly"]["relative_humidity_2m"],
+                "wind_speed": data["hourly"]["windspeed_10m"]
+            })
+        except Exception as e:
+            st.error("فشل تحميل البيانات." if is_ar else f"Failed to fetch data: {e}")
+            st.stop()
+
+    # معالجة القيم المفقودة بطريقة المتوسط بين الجارتين
+    def fill_with_avg_of_neighbors(series):
+        series = series.copy()
+        for i in range(1, len(series) - 1):
+            if pd.isna(series[i]) and not pd.isna(series[i - 1]) and not pd.isna(series[i + 1]):
+                series[i] = (series[i - 1] + series[i + 1]) / 2
+        return series
+
+    for col in ["temperature", "humidity", "wind_speed"]:
+        df[col] = fill_with_avg_of_neighbors(df[col])
+        df[col] = df[col].fillna(method="ffill").fillna(method="bfill")
+        df[col] = df[col].apply(lambda x: int(x + 0.5))
+
+    # تجهيز البيانات للنمذجة
+    look_back = 72
+    target = "temperature"
+    X, y = [], []
+    data_arr = df[[target]].values
+    for i in range(len(data_arr) - look_back):
+        X.append(data_arr[i:i+look_back].flatten())
+        y.append(data_arr[i+look_back][0])
+    X, y = np.array(X), np.array(y)
+
+    if len(X) == 0:
+        st.warning("البيانات غير كافية للتدريب." if is_ar else "Not enough data to train.")
+        st.stop()
+
+    X_train, X_test, y_train, y_test = train_test_split(X, y, shuffle=False, test_size=0.2)
+
+    models = {
+        "Linear Regression": LinearRegression(),
+        "SVR": SVR()
+    }
+
+    for model in models.values():
+        model.fit(X_train, y_train)
+
+    # توقع درجات الحرارة لكل ساعة من يوم الغد باستخدام النموذجين
+    hours_ahead = 24
+    current_sequence = df[[target]].values[-look_back:].flatten().reshape(1, -1)
+    hourly_predictions = []
+
+    for _ in range(hours_ahead):
+        preds = [model.predict(current_sequence)[0] for model in models.values()]
+        avg_pred = sum(preds) / len(preds)
+        hourly_predictions.append(avg_pred)
+        current_sequence = np.append(current_sequence[:, 1:], [[avg_pred]], axis=1)
+
+    # إعداد توقيتات الساعات
+    start_time = datetime.combine(date.today() + timedelta(days=1), datetime.min.time())
+    hourly_times = [start_time + timedelta(hours=i) for i in range(hours_ahead)]
+
+    df_forecast = pd.DataFrame({
+        "Time": hourly_times,
+        "Predicted Temperature (°C)": hourly_predictions
+    })
+
+    # عرض النتائج
+    st.subheader("🌤️ " + ("توقع درجات الحرارة لكل ساعة غدًا" if is_ar else "Hourly Temperature Forecast for Tomorrow"))
+    st.markdown(f"📍 {city}, {country}")
+    st.markdown(f"📅 {date.today() + timedelta(days=1)}")
+    st.line_chart(df_forecast.set_index("Time"))
