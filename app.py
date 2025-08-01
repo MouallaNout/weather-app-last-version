@@ -113,27 +113,31 @@ if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
         results[name] = mae
         times[name] = elapsed
         predictions.append(pred)
+# توقع درجات الحرارة لكل ساعة غدًا باستخدام النموذج
+hourly_predictions = []
+hours_ahead = 24
+current_sequence = df[[target]].values[-look_back:].flatten().reshape(1, -1)
 
-    # توقع الغد
-    last_sequence = df[[target]].values[-look_back:].flatten().reshape(1, -1)
-    tomorrow_preds = [model.predict(last_sequence)[0] for model in models.values()]
-    tomorrow_temp = sum(tomorrow_preds) / len(tomorrow_preds)
+for _ in range(hours_ahead):
+    model_preds = [model.predict(current_sequence)[0] for model in models.values()]
+    avg_pred = sum(model_preds) / len(model_preds)
+    hourly_predictions.append(avg_pred)
 
-    # عرض النتائج بشكل مبسط وإنساني
-    st.success("✅ " + ("تم التنبؤ بنجاح!" if is_ar else "Prediction completed!"))
-    st.markdown("---")
+    # تحديث التسلسل الزمني بالتنبؤ الجديد
+    current_sequence = np.append(current_sequence[:, 1:], [[avg_pred]], axis=1)
 
-    st.subheader("🌤️ " + ("توقع درجة الحرارة ليوم الغد" if is_ar else "Tomorrow's Temperature Forecast"))
-    st.markdown(f"📍 {city}, {country}")
-    st.markdown(f"📅 {date.today() + timedelta(days=1)}")
-    st.markdown(f"🌡️ **{tomorrow_temp:.1f}°C**")
+# إعداد بيانات التوقيت للغد
+start_time = datetime.combine(date.today() + timedelta(days=1), datetime.min.time())
+hourly_times = [start_time + timedelta(hours=i) for i in range(hours_ahead)]
 
-    st.markdown("---")
-    st.subheader("📈 " + ("أداء النماذج" if is_ar else "Model Performance"))
-    perf_df = pd.DataFrame({
-        "MAE": results,
-        "Time (s)": times
-    })
-    st.dataframe(perf_df.style.format({"MAE": "{:.2f}", "Time (s)": "{:.2f}"}))
+# إنشاء DataFrame لعرض النتائج
+df_forecast = pd.DataFrame({
+    "Time": hourly_times,
+    "Predicted Temperature (°C)": hourly_predictions
+})
 
-    st.bar_chart(perf_df["MAE"])
+# العرض في Streamlit
+st.subheader("🌤️ " + ("توقع درجات الحرارة لكل ساعة غدًا" if is_ar else "Hourly Temperature Forecast for Tomorrow"))
+st.markdown(f"📍 {city}, {country}")
+st.markdown(f"📅 {date.today() + timedelta(days=1)}")
+st.line_chart(df_forecast.set_index("Time"))
