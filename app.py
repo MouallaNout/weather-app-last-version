@@ -9,13 +9,13 @@ from sklearn.linear_model import LinearRegression
 from sklearn.svm import SVR
 from sklearn.model_selection import train_test_split
 
-# إعداد اللغة
+# اللغة
 lang = st.sidebar.selectbox("Language / اللغة", ["English", "العربية"])
 is_ar = lang == "العربية"
 title = "توقع الطقس باستخدام الذكاء الاصطناعي" if is_ar else "AI-Based Weather Forecast"
 st.title(title)
 
-# اختيار الدولة والمدينة
+# الدولة والمدينة
 city_coords = {
     "USA": {
         "New York": (40.71, -74.01),
@@ -30,11 +30,25 @@ city_coords = {
         "Munich": (48.1351, 11.5820)
     }
 }
-
 st.sidebar.markdown("### 🌍 " + ("اختر الدولة والمدينة" if is_ar else "Select Country and City"))
 country = st.sidebar.selectbox("الدولة" if is_ar else "Country", list(city_coords.keys()))
 city = st.sidebar.selectbox("المدينة" if is_ar else "City", list(city_coords[country].keys()))
 lat, lon = city_coords[country][city]
+
+# اختيار المتغيرات للتنبؤ
+st.sidebar.markdown("### 🔧 " + ("اختر ما تريد التنبؤ به" if is_ar else "Select What to Predict"))
+all_vars = {
+    "🌡️ " + ("درجة الحرارة" if is_ar else "Temperature"): "temperature",
+    "💧 " + ("الرطوبة" if is_ar else "Humidity"): "humidity",
+    "💨 " + ("سرعة الرياح" if is_ar else "Wind Speed"): "wind_speed"
+}
+selected_display = st.sidebar.multiselect("", list(all_vars.keys()), default=list(all_vars.keys()))
+selected_vars = [all_vars[d] for d in selected_display]
+
+# اختيار وحدة القياس
+st.sidebar.markdown("### 📐 " + ("اختر وحدة القياس" if is_ar else "Choose Units"))
+unit_temp = st.sidebar.radio("🌡️ Temperature", ["°C", "°F"])
+unit_wind = st.sidebar.radio("💨 Wind Speed", ["km/h", "m/s"])
 
 # زر التنبؤ
 if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
@@ -64,7 +78,7 @@ if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
             st.error("فشل تحميل البيانات." if is_ar else f"Failed to fetch data: {e}")
             st.stop()
 
-    # معالجة القيم المفقودة
+    # تنظيف البيانات
     def fill_with_avg_of_neighbors(series):
         series = series.copy()
         for i in range(1, len(series) - 1):
@@ -77,18 +91,16 @@ if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
         df[col] = df[col].fillna(method="ffill").fillna(method="bfill")
         df[col] = df[col].apply(lambda x: int(x + 0.5))
 
-    # النمذجة وتوقع الثلاث متغيرات
+    # النمذجة
     look_back = 72
     hours_ahead = 24
-    variables = ["temperature", "humidity", "wind_speed"]
     forecast_results = {}
-
     models = {
         "Linear Regression": LinearRegression(),
         "SVR": SVR()
     }
 
-    for var in variables:
+    for var in selected_vars:
         X, y = [], []
         data_arr = df[[var]].values
         for i in range(len(data_arr) - look_back):
@@ -101,12 +113,9 @@ if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
             st.stop()
 
         X_train, _, y_train, _ = train_test_split(X, y, shuffle=False, test_size=0.2)
-
-        # تدريب النموذجين
         for model in models.values():
             model.fit(X_train, y_train)
 
-        # التنبؤ بالساعات القادمة
         current_sequence = df[[var]].values[-look_back:].flatten().reshape(1, -1)
         hourly_preds = []
         for _ in range(hours_ahead):
@@ -117,19 +126,27 @@ if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
 
         forecast_results[var] = hourly_preds
 
-    # أوقات الساعات
+    # الوقت
     start_time = datetime.combine(date.today() + timedelta(days=1), datetime.min.time())
     hourly_times = [start_time + timedelta(hours=i) for i in range(hours_ahead)]
 
-    # جدول التوقعات النهائي
-    df_forecast = pd.DataFrame({
-        "Time": hourly_times,
-        "Temperature (°C)": forecast_results["temperature"],
-        "Humidity (%)": forecast_results["humidity"],
-        "Wind Speed (km/h)": forecast_results["wind_speed"]
-    })
+    df_forecast = pd.DataFrame({"Time": hourly_times})
+    if "temperature" in forecast_results:
+        temps = forecast_results["temperature"]
+        if unit_temp == "°F":
+            temps = [(t * 9/5) + 32 for t in temps]
+        df_forecast["Temperature (" + unit_temp + ")"] = temps
 
-    # دالة لرسم مخطط بعنوان باستخدام matplotlib
+    if "humidity" in forecast_results:
+        df_forecast["Humidity (%)"] = forecast_results["humidity"]
+
+    if "wind_speed" in forecast_results:
+        wind = forecast_results["wind_speed"]
+        if unit_wind == "m/s":
+            wind = [w / 3.6 for w in wind]
+        df_forecast["Wind Speed (" + unit_wind + ")"] = wind
+
+    # رسم المخططات
     def plot_line_chart(df, column, title):
         fig, ax = plt.subplots()
         ax.plot(df["Time"], df[column], marker='o')
@@ -145,12 +162,11 @@ if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
     st.markdown(f"📍 {city}, {country}")
     st.markdown(f"📅 {date.today() + timedelta(days=1)}")
 
-    plot_line_chart(df_forecast, "Temperature (°C)", "🌡️ " + ("تغير درجة الحرارة" if is_ar else "Temperature Throughout the Day"))
-    plot_line_chart(df_forecast, "Humidity (%)", "💧 " + ("تغير الرطوبة" if is_ar else "Humidity Throughout the Day"))
-    plot_line_chart(df_forecast, "Wind Speed (km/h)", "💨 " + ("تغير سرعة الرياح" if is_ar else "Wind Speed Throughout the Day"))
+    for col in df_forecast.columns:
+        if col != "Time":
+            label = col.split(" (")[0]
+            emoji = "🌡️" if "Temp" in col else "💧" if "Humidity" in col else "💨"
+            title = emoji + " " + (f"تغير {label}" if is_ar else f"{label} Throughout the Day")
+            plot_line_chart(df_forecast, col, title)
 
-    st.dataframe(df_forecast.style.format({
-        "Temperature (°C)": "{:.1f}",
-        "Humidity (%)": "{:.0f}",
-        "Wind Speed (km/h)": "{:.1f}"
-    }))
+    st.dataframe(df_forecast.style.format(precision=1))
