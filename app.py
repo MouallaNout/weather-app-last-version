@@ -51,7 +51,7 @@ def download_model(service, filename):
 def upload_model(service, filename, model):
     with open(filename, "wb") as f:
         pickle.dump(model, f)
-    file_metadata = {"name": filename}
+    file_metadata = {"name": filename, "parents": [st.secrets["GDRIVE_FOLDER_ID"]]}
     media = MediaFileUpload(filename, mimetype="application/octet-stream")
     service.files().create(body=file_metadata, media_body=media, fields="id").execute()
     os.remove(filename)
