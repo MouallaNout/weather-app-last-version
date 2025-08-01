@@ -13,7 +13,6 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
 import matplotlib.pyplot as plt
 
-# ================= Google Drive Integration =================
 @st.cache_resource
 def create_drive_service():
     credentials = service_account.Credentials.from_service_account_info({
@@ -73,31 +72,38 @@ country = st.sidebar.selectbox("Country / الدولة", list(city_coords.keys()
 city = st.sidebar.selectbox("City / المدينة", list(city_coords[country].keys()))
 lat, lon = city_coords[country][city]
 
+st.sidebar.markdown("### 🔧 " + ("ماذا تريد أن يتم التنبؤ به؟" if is_ar else "Select what to predict"))
+all_vars = {
+    "🌡️ " + ("Temperature" if not is_ar else "درجة الحرارة"): "temperature",
+    "💧 " + ("Humidity" if not is_ar else "الرطوبة"): "humidity",
+    "🌬️ " + ("Wind Speed" if not is_ar else "سرعة الرياح"): "wind_speed"
+}
+selected_display = st.sidebar.multiselect("", list(all_vars.keys()), default=list(all_vars.keys()))
+selected_vars = [all_vars[d] for d in selected_display]
+
+st.sidebar.markdown("### 🔢 " + ("Select units" if not is_ar else "اختر وحدات القياس"))
+unit_temp = st.sidebar.radio("Temperature", ["C", "F"], index=0)
+unit_wind = st.sidebar.radio("Wind Speed", ["km/h", "m/s"], index=0)
+
 if st.sidebar.button("Start Prediction" if not is_ar else "ابدأ التنبؤ"):
-    with st.spinner("Fetching weather data..." if not is_ar else "جاري جلب البيانات..."):
-        start_date = (date.today() - timedelta(days=730)).isoformat()
-        end_date = date.today().isoformat()
-        api_url = (
-            f"https://archive-api.open-meteo.com/v1/archive?latitude={lat}&longitude={lon}"
-            f"&start_date={start_date}&end_date={end_date}"
-            f"&hourly=temperature_2m,relative_humidity_2m,windspeed_10m&timezone=auto"
-        )
+    start_date = (date.today() - timedelta(days=730)).isoformat()
+    end_date = date.today().isoformat()
+    api_url = (
+        f"https://archive-api.open-meteo.com/v1/archive?latitude={lat}&longitude={lon}"
+        f"&start_date={start_date}&end_date={end_date}"
+        f"&hourly=temperature_2m,relative_humidity_2m,windspeed_10m&timezone=auto"
+    )
 
-        try:
-            response = requests.get(api_url)
-            response.raise_for_status()
-            data = response.json()
-            df = pd.DataFrame({
-                "datetime": pd.to_datetime(data["hourly"]["time"]),
-                "temperature": data["hourly"]["temperature_2m"],
-                "humidity": data["hourly"]["relative_humidity_2m"],
-                "wind_speed": data["hourly"]["windspeed_10m"]
-            })
-        except Exception as e:
-            st.error("Failed to fetch data" if not is_ar else "فشل جلب البيانات")
-            st.stop()
+    response = requests.get(api_url)
+    response.raise_for_status()
+    data = response.json()
+    df = pd.DataFrame({
+        "datetime": pd.to_datetime(data["hourly"]["time"]),
+        "temperature": data["hourly"]["temperature_2m"],
+        "humidity": data["hourly"]["relative_humidity_2m"],
+        "wind_speed": data["hourly"]["windspeed_10m"]
+    })
 
-    # Fill missing data
     def fill_with_avg_of_neighbors(series):
         series = series.copy()
         for i in range(1, len(series) - 1):
@@ -105,13 +111,12 @@ if st.sidebar.button("Start Prediction" if not is_ar else "ابدأ التنبؤ
                 series[i] = (series[i - 1] + series[i + 1]) / 2
         return series
 
-    for col in ["temperature", "humidity", "wind_speed"]:
+    for col in df.columns[1:]:
         df[col] = fill_with_avg_of_neighbors(df[col])
         df[col] = df[col].fillna(method="ffill").fillna(method="bfill")
 
     look_back = 72
     hours_ahead = 24
-    selected_vars = ["temperature", "humidity", "wind_speed"]
     forecast_results = {}
     service = create_drive_service()
 
@@ -123,21 +128,14 @@ if st.sidebar.button("Start Prediction" if not is_ar else "ابدأ التنبؤ
             y.append(data_arr[i+look_back][0])
         X, y = np.array(X), np.array(y)
 
-        if len(X) == 0:
-            st.warning("Not enough data to train." if not is_ar else "البيانات غير كافية للتدريب")
-            st.stop()
-
         X_train, _, y_train, _ = train_test_split(X, y, shuffle=False, test_size=0.2)
         model_filename = f"{country}_{city}_{var}.pkl"
         model = download_model(service, model_filename)
 
-        if model:
-            st.info(f"✅ Loaded saved model for {city} - {var}")
-        else:
+        if not model:
             model = LinearRegression()
             model.fit(X_train, y_train)
             upload_model(service, model_filename, model)
-            st.success(f"🆕 Trained and uploaded model for {city} - {var}")
 
         current_sequence = df[[var]].values[-look_back:].flatten().reshape(1, -1)
         hourly_preds = []
@@ -150,14 +148,22 @@ if st.sidebar.button("Start Prediction" if not is_ar else "ابدأ التنبؤ
 
     start_time = datetime.combine(date.today() + timedelta(days=1), datetime.min.time())
     hourly_times = [start_time + timedelta(hours=i) for i in range(hours_ahead)]
-
     df_forecast = pd.DataFrame({"Time": hourly_times})
+
     if "temperature" in forecast_results:
-        df_forecast["Temperature (°C)"] = forecast_results["temperature"]
+        temp = forecast_results["temperature"]
+        if unit_temp == "F":
+            temp = [(t * 9/5) + 32 for t in temp]
+        df_forecast[f"Temperature ({unit_temp})"] = temp
+
     if "humidity" in forecast_results:
         df_forecast["Humidity (%)"] = forecast_results["humidity"]
+
     if "wind_speed" in forecast_results:
-        df_forecast["Wind Speed (km/h)"] = forecast_results["wind_speed"]
+        wind = forecast_results["wind_speed"]
+        if unit_wind == "m/s":
+            wind = [w / 3.6 for w in wind]
+        df_forecast[f"Wind Speed ({unit_wind})"] = wind
 
     def plot_line_chart(df, column, title):
         fig, ax = plt.subplots()
@@ -169,14 +175,14 @@ if st.sidebar.button("Start Prediction" if not is_ar else "ابدأ التنبؤ
         plt.xticks(rotation=45)
         st.pyplot(fig)
 
-    st.subheader("Hourly Weather Forecast for Tomorrow" if not is_ar else "توقع الطقس لكل ساعة غدًا")
+    st.subheader("Hourly Weather Forecast for Tomorrow" if not is_ar else "توقعات الطقس لكل ساعة غدًا")
     st.markdown(f"📍 {city}, {country}")
     st.markdown(f"📅 {date.today() + timedelta(days=1)}")
 
     for col in df_forecast.columns:
         if col != "Time":
             label = col.split(" (")[0]
-            emoji = "🌡️" if "Temp" in col else "💧" if "Humidity" in col else "💨"
+            emoji = "🌡️" if "Temp" in col else "💧" if "Humidity" in col else "🌬️"
             title = emoji + " " + (f"تغير {label}" if is_ar else f"{label} Throughout the Day")
             plot_line_chart(df_forecast, col, title)
 
