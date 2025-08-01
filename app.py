@@ -7,7 +7,6 @@ from datetime import date, timedelta, datetime
 import matplotlib.pyplot as plt
 from sklearn.linear_model import LinearRegression
 from sklearn.svm import SVR
-from sklearn.metrics import mean_absolute_error
 from sklearn.model_selection import train_test_split
 
 # إعداد اللغة
@@ -65,7 +64,7 @@ if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
             st.error("فشل تحميل البيانات." if is_ar else f"Failed to fetch data: {e}")
             st.stop()
 
-    # معالجة القيم المفقودة بطريقة المتوسط بين الجارتين
+    # معالجة القيم المفقودة
     def fill_with_avg_of_neighbors(series):
         series = series.copy()
         for i in range(1, len(series) - 1):
@@ -78,54 +77,69 @@ if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
         df[col] = df[col].fillna(method="ffill").fillna(method="bfill")
         df[col] = df[col].apply(lambda x: int(x + 0.5))
 
-    # تجهيز البيانات للنمذجة
+    # النمذجة وتوقع الثلاث متغيرات
     look_back = 72
-    target = "temperature"
-    X, y = [], []
-    data_arr = df[[target]].values
-    for i in range(len(data_arr) - look_back):
-        X.append(data_arr[i:i+look_back].flatten())
-        y.append(data_arr[i+look_back][0])
-    X, y = np.array(X), np.array(y)
-
-    if len(X) == 0:
-        st.warning("البيانات غير كافية للتدريب." if is_ar else "Not enough data to train.")
-        st.stop()
-
-    X_train, X_test, y_train, y_test = train_test_split(X, y, shuffle=False, test_size=0.2)
+    hours_ahead = 24
+    variables = ["temperature", "humidity", "wind_speed"]
+    forecast_results = {}
 
     models = {
         "Linear Regression": LinearRegression(),
         "SVR": SVR()
     }
 
-    for model in models.values():
-        model.fit(X_train, y_train)
+    for var in variables:
+        X, y = [], []
+        data_arr = df[[var]].values
+        for i in range(len(data_arr) - look_back):
+            X.append(data_arr[i:i+look_back].flatten())
+            y.append(data_arr[i+look_back][0])
+        X, y = np.array(X), np.array(y)
 
-    # توقع درجات الحرارة لكل ساعة من يوم الغد باستخدام النموذجين
-    hours_ahead = 24
-    current_sequence = df[[target]].values[-look_back:].flatten().reshape(1, -1)
-    hourly_predictions = []
+        if len(X) == 0:
+            st.warning("البيانات غير كافية للتدريب." if is_ar else "Not enough data to train.")
+            st.stop()
 
-    for _ in range(hours_ahead):
-        preds = [model.predict(current_sequence)[0] for model in models.values()]
-        avg_pred = sum(preds) / len(preds)
-        hourly_predictions.append(avg_pred)
-        current_sequence = np.append(current_sequence[:, 1:], [[avg_pred]], axis=1)
+        X_train, _, y_train, _ = train_test_split(X, y, shuffle=False, test_size=0.2)
 
-    # إعداد توقيتات الساعات
+        # تدريب النموذجين
+        for model in models.values():
+            model.fit(X_train, y_train)
+
+        # التنبؤ بالساعات القادمة
+        current_sequence = df[[var]].values[-look_back:].flatten().reshape(1, -1)
+        hourly_preds = []
+        for _ in range(hours_ahead):
+            preds = [model.predict(current_sequence)[0] for model in models.values()]
+            avg_pred = sum(preds) / len(preds)
+            hourly_preds.append(avg_pred)
+            current_sequence = np.append(current_sequence[:, 1:], [[avg_pred]], axis=1)
+
+        forecast_results[var] = hourly_preds
+
+    # أوقات الساعات
     start_time = datetime.combine(date.today() + timedelta(days=1), datetime.min.time())
     hourly_times = [start_time + timedelta(hours=i) for i in range(hours_ahead)]
 
+    # جدول التوقعات النهائي
     df_forecast = pd.DataFrame({
         "Time": hourly_times,
-        "Predicted Temperature (°C)": hourly_predictions
+        "Temperature (°C)": forecast_results["temperature"],
+        "Humidity (%)": forecast_results["humidity"],
+        "Wind Speed (km/h)": forecast_results["wind_speed"]
     })
 
-    # عرض النتائج
-    st.subheader("🌤️ " + ("توقع درجات الحرارة لكل ساعة غدًا" if is_ar else "Hourly Temperature Forecast for Tomorrow"))
+    # العرض
+    st.subheader("🌤️ " + ("توقعات الطقس لكل ساعة غدًا" if is_ar else "Hourly Weather Forecast for Tomorrow"))
     st.markdown(f"📍 {city}, {country}")
     st.markdown(f"📅 {date.today() + timedelta(days=1)}")
-    st.line_chart(df_forecast.set_index("Time"))
-    st.dataframe(df_forecast.style.format({"Predicted Temperature (°C)": "{:.1f}"}))
 
+    st.line_chart(df_forecast.set_index("Time")[["Temperature (°C)"]])
+    st.line_chart(df_forecast.set_index("Time")[["Humidity (%)"]])
+    st.line_chart(df_forecast.set_index("Time")[["Wind Speed (km/h)"]])
+
+    st.dataframe(df_forecast.style.format({
+        "Temperature (°C)": "{:.1f}",
+        "Humidity (%)": "{:.0f}",
+        "Wind Speed (km/h)": "{:.1f}"
+    }))
