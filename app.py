@@ -27,60 +27,7 @@ with open("worldcities.csv", newline='', encoding="utf-8") as csvfile:
         lng = float(row["lng"])
         if country not in city_coords:
             city_coords[country] = {}
-        city_coords[country][city] = (lat, lng),
-    "Egypt": {
-        "Cairo": (30.0444, 31.2357),
-        "Alexandria": (31.2001, 29.9187),
-        "Giza": (30.0131, 31.2089)
-    },
-    "United Kingdom": {
-        "London": (51.5074, -0.1278),
-        "Manchester": (53.4808, -2.2426),
-        "Birmingham": (52.4862, -1.8904)
-    },
-    "UAE": {
-        "Dubai": (25.2048, 55.2708),
-        "Abu Dhabi": (24.4539, 54.3773),
-        "Sharjah": (25.3463, 55.4209)
-    },
-    "India": {
-        "New Delhi": (28.6139, 77.2090),
-        "Mumbai": (19.0760, 72.8777),
-        "Bangalore": (12.9716, 77.5946)
-    },
-    "Jordan": {
-        "Amman": (31.9539, 35.9106),
-        "Irbid": (32.5569, 35.8473),
-        "Zarqa": (32.0728, 36.0880)
-    },
-    "Lebanon": {
-        "Beirut": (33.8938, 35.5018),
-        "Tripoli": (34.4333, 35.8333),
-        "Sidon": (33.5606, 35.3758)
-    },
-    "Morocco": {
-        "Casablanca": (33.5731, -7.5898),
-        "Rabat": (34.0209, -6.8416),
-        "Marrakesh": (31.6295, -7.9811)
-    },
-    "Algeria": {
-        "Algiers": (36.7538, 3.0588),
-        "Oran": (35.6971, -0.6308),
-        "Constantine": (36.3650, 6.6147)
-    },
-    "Qatar": {
-        "Doha": (25.276987, 51.520008)
-    },
-    "Kuwait": {
-        "Kuwait City": (29.3759, 47.9774)
-    },
-    "Oman": {
-        "Muscat": (23.5880, 58.3829)
-    },
-    "Bahrain": {
-        "Manama": (26.2285, 50.5860)
-    }
-}
+        city_coords[country][city] = (lat, lng)
 
 st.sidebar.markdown("### 🌍 " + ("اختر الدولة والمدينة" if is_ar else "Select Country and City"))
 country = st.sidebar.selectbox("الدولة" if is_ar else "Country", list(city_coords.keys()))
