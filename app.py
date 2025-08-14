@@ -164,8 +164,7 @@ if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
     for col in df_forecast.columns:
         if col != "Time":
             label = col.split(" (")[0]
-            emoji = if "Temp" in col else if "Humidity" in col else
-            title = emoji + " " + (f"{label}" if is_ar else f"{label} Throughout the Day")
+            title = label if is_ar else f"{label} Throughout the Day"
             plot_line_chart(df_forecast, col, title)
 
     st.dataframe(df_forecast.style.format(precision=1))
