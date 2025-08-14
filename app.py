@@ -42,7 +42,7 @@ all_vars = {
 selected_display = st.sidebar.multiselect("", list(all_vars.keys()), default=list(all_vars.keys()))
 selected_vars = [all_vars[d] for d in selected_display]
 
-st.sidebar.markdown("Select units" if not is_ar else "اختر وحدات القياس"))
+st.sidebar.markdown("Select units" if not is_ar else "اختر وحدات القياس")
 unit_temp = st.sidebar.radio(
     "درجة الحرارة" if is_ar else "Temperature",
     ["°م" if is_ar else "C", "°ف" if is_ar else "F"],
