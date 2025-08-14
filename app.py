@@ -28,23 +28,31 @@ with open("worldcities.csv", newline='', encoding="utf-8") as csvfile:
             city_coords[country] = {}
         city_coords[country][city] = (lat, lng)
 
-st.sidebar.markdown("### 🌍 " + ("اختر الدولة والمدينة" if is_ar else "Select Country and City"))
+st.sidebar.markdown("اختر الدولة والمدينة" if is_ar else "Select Country and City")
 country = st.sidebar.selectbox("الدولة" if is_ar else "Country", list(city_coords.keys()))
 city = st.sidebar.selectbox("المدينة" if is_ar else "City", list(city_coords[country].keys()))
 lat, lon = city_coords[country][city]
 
-st.sidebar.markdown("### 🔧 " + ("ماذا تريد أن يتم التنبؤ به؟" if is_ar else "Select what to predict"))
+st.sidebar.markdown("ماذا تريد أن يتم التنبؤ به؟" if is_ar else "Select what to predict")
 all_vars = {
-    "🌡️ " + ("Temperature" if not is_ar else "درجة الحرارة"): "temperature",
-    "💧 " + ("Humidity" if not is_ar else "الرطوبة"): "humidity",
-    "🌬️ " + ("Wind Speed" if not is_ar else "سرعة الرياح"): "wind_speed"
+    ("Temperature" if not is_ar else "درجة الحرارة"): "temperature",
+    ("Humidity" if not is_ar else "الرطوبة"): "humidity",
+    ("Wind Speed" if not is_ar else "سرعة الرياح"): "wind_speed"
 }
 selected_display = st.sidebar.multiselect("", list(all_vars.keys()), default=list(all_vars.keys()))
 selected_vars = [all_vars[d] for d in selected_display]
 
 st.sidebar.markdown("### 🔢 " + ("Select units" if not is_ar else "اختر وحدات القياس"))
-unit_temp = st.sidebar.radio("درجة الحرارة" if is_ar else "Temperature", ["C", "F"], index=0)
-unit_wind = st.sidebar.radio("سرعة الرياح" if is_ar else "Wind Speed", ["km/h", "m/s"], index=0)
+unit_temp = st.sidebar.radio(
+    "درجة الحرارة" if is_ar else "Temperature",
+    ["°م" if is_ar else "C", "°ف" if is_ar else "F"],
+    index=0
+)
+unit_wind = st.sidebar.radio(
+    "سرعة الرياح" if is_ar else "Wind Speed",
+    ["كم/س" if is_ar else "km/h", "م/ث" if is_ar else "m/s"],
+    index=0
+)
 
 # بدء جلب البيانات
 if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
@@ -150,13 +158,13 @@ if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
         st.pyplot(fig)
 
     st.subheader("Hourly Weather Forecast for Tomorrow" if not is_ar else "توقعات الطقس لكل ساعة غدًا")
-    st.markdown(f"📍 {city}, {country}")
-    st.markdown(f"📅 {date.today() + timedelta(days=1)}")
+    st.markdown(f"{city}, {country}")
+    st.markdown(f"{date.today() + timedelta(days=1)}")
 
     for col in df_forecast.columns:
         if col != "Time":
             label = col.split(" (")[0]
-            emoji = "🌡️" if "Temp" in col else "💧" if "Humidity" in col else "🌬️"
+            emoji = if "Temp" in col else if "Humidity" in col else
             title = emoji + " " + (f"{label}" if is_ar else f"{label} Throughout the Day")
             plot_line_chart(df_forecast, col, title)
 
