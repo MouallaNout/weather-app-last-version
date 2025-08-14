@@ -47,9 +47,8 @@ st.sidebar.markdown("### 🔢 " + ("Select units" if not is_ar else "اختر و
 unit_temp = st.sidebar.radio("درجة الحرارة" if is_ar else "Temperature", ["C", "F"], index=0)
 unit_wind = st.sidebar.radio("سرعة الرياح" if is_ar else "Wind Speed", ["km/h", "m/s"], index=0)
 
-# زر البدء
-if st.sidebar.button("Start Prediction" if not is_ar else "ابدأ التنبؤ"):
-    # جلب البيانات
+# بدء جلب البيانات
+if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
     start_date = (date.today() - timedelta(days=730)).isoformat()
     end_date = date.today().isoformat()
     api_url = (
@@ -58,15 +57,29 @@ if st.sidebar.button("Start Prediction" if not is_ar else "ابدأ التنبؤ
         f"&hourly=temperature_2m,relative_humidity_2m,windspeed_10m&timezone=auto"
     )
 
-    response = requests.get(api_url)
-    response.raise_for_status()
-    data = response.json()
-    df = pd.DataFrame({
-        "datetime": pd.to_datetime(data["hourly"]["time"]),
-        "temperature": data["hourly"]["temperature_2m"],
-        "humidity": data["hourly"]["relative_humidity_2m"],
-        "wind_speed": data["hourly"]["windspeed_10m"]
-    })
+    try:
+        response = requests.get(api_url)
+        if response.status_code != 200:
+            st.error("فشل في الاتصال بواجهة الطقس." if is_ar else "Failed to connect to weather API.")
+            st.stop()
+
+        try:
+            data = response.json()
+        except ValueError:
+            st.error("الاستجابة من API غير صالحة." if is_ar else "Invalid response from API.")
+            st.stop()
+
+        df = pd.DataFrame({
+            "datetime": pd.to_datetime(data["hourly"]["time"]),
+            "temperature": data["hourly"]["temperature_2m"],
+            "humidity": data["hourly"]["relative_humidity_2m"],
+            "wind_speed": data["hourly"]["windspeed_10m"]
+        })
+
+        st.success("تم تحميل البيانات بنجاح!" if is_ar else "Weather data loaded successfully!")
+    except Exception as e:
+        st.error("حدث خطأ أثناء تحميل البيانات." if is_ar else f"An error occurred while fetching data: {e}")
+        st.stop()..
 
     # معالجة القيم المفقودة
     def fill_with_avg_of_neighbors(series):
