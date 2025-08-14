@@ -13,9 +13,21 @@ lang = st.sidebar.selectbox("Language / اللغة", ["English", "العربية
 is_ar = lang == "العربية"
 st.title("AI-Based Weather Forecast" if not is_ar else "توقع الطقس باستخدام الذكاء الاصطناعي")
 
-# تحميل المدن والدول من ملف JSON
-with open("world_cities_full.json", "r", encoding="utf-8") as f:
-    city_coords = json.load(f)
+df = pd.read_csv("worldcities.csv")  # تأكد أن اسم الملف صحيح
+
+city_coords = {}
+for _, row in df.iterrows():
+    country = row["country"]
+    city = row["city"]
+    lat = row["lat"]
+    lng = row["lng"]
+
+    if pd.isna(lat) or pd.isna(lng):
+        continue
+
+    if country not in city_coords:
+        city_coords[country] = {}
+    city_coords[country][city] = [lat, lng]
 
 # اختيار الدولة والمدينة
 st.sidebar.markdown("### 🌍 " + ("اختر الدولة والمدينة" if is_ar else "Select Country and City"))
