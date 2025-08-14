@@ -79,7 +79,7 @@ if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
         st.success("تم تحميل البيانات بنجاح!" if is_ar else "Weather data loaded successfully!")
     except Exception as e:
         st.error("حدث خطأ أثناء تحميل البيانات." if is_ar else f"An error occurred while fetching data: {e}")
-        st.stop()..
+        st.stop()
 
     # معالجة القيم المفقودة
     def fill_with_avg_of_neighbors(series):
