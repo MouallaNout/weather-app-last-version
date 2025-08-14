@@ -3,58 +3,10 @@ import pandas as pd
 import numpy as np
 import requests
 import pickle
-import io
-import os
 from datetime import date, timedelta, datetime
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
 import matplotlib.pyplot as plt
-
-@st.cache_resource
-def create_drive_service():
-    credentials = service_account.Credentials.from_service_account_info({
-        "type": "service_account",
-        "project_id": st.secrets["GDRIVE_PROJECT_ID"],
-        "private_key_id": "",
-        "private_key": st.secrets["GDRIVE_PRIVATE_KEY"].replace("\\n", "\n"),
-        "client_email": st.secrets["GDRIVE_CLIENT_EMAIL"],
-        "client_id": st.secrets["GDRIVE_CLIENT_ID"],
-        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-        "token_uri": "https://oauth2.googleapis.com/token",
-        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-        "client_x509_cert_url": f"https://www.googleapis.com/robot/v1/metadata/x509/{st.secrets['GDRIVE_CLIENT_EMAIL'].replace('@', '%40')}"
-    })
-    return build('drive', 'v3', credentials=credentials)
-
-def find_drive_file(service, filename):
-    query = f"name='{filename}' and trashed=false"
-    results = service.files().list(q=query, fields="files(id, name)").execute()
-    files = results.get("files", [])
-    return files[0]["id"] if files else None
-
-def download_model(service, filename):
-    file_id = find_drive_file(service, filename)
-    if not file_id:
-        return None
-    request = service.files().get_media(fileId=file_id)
-    fh = io.BytesIO()
-    downloader = MediaIoBaseDownload(fh, request)
-    done = False
-    while not done:
-        _, done = downloader.next_chunk()
-    fh.seek(0)
-    return pickle.load(fh)
-
-def upload_model(service, filename, model):
-    with open(filename, "wb") as f:
-        pickle.dump(model, f)
-    file_metadata = {"name": filename, "parents": [st.secrets["GDRIVE_FOLDER_ID"]]}
-    media = MediaFileUpload(filename, mimetype="application/octet-stream")
-    service.files().create(body=file_metadata, media_body=media, fields="id").execute()
-    os.remove(filename)
 
 # ================== App ====================
 lang = st.sidebar.selectbox("Language / اللغة", ["English", "العربية"])
@@ -118,7 +70,6 @@ if st.sidebar.button("Start Prediction" if not is_ar else "ابدأ التنبؤ
     look_back = 72
     hours_ahead = 24
     forecast_results = {}
-    service = create_drive_service()
 
     for var in selected_vars:
         X, y = [], []
@@ -129,13 +80,9 @@ if st.sidebar.button("Start Prediction" if not is_ar else "ابدأ التنبؤ
         X, y = np.array(X), np.array(y)
 
         X_train, _, y_train, _ = train_test_split(X, y, shuffle=False, test_size=0.2)
-        model_filename = f"{country}_{city}_{var}.pkl"
-        model = download_model(service, model_filename)
 
-        if not model:
-            model = LinearRegression()
-            model.fit(X_train, y_train)
-            upload_model(service, model_filename, model)
+        model = LinearRegression()
+        model.fit(X_train, y_train)
 
         current_sequence = df[[var]].values[-look_back:].flatten().reshape(1, -1)
         hourly_preds = []
