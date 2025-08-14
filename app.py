@@ -2,85 +2,28 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import requests
-import pickle
+import json
 from datetime import date, timedelta, datetime
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 
-# ================== App ====================
+# إعداد اللغة
 lang = st.sidebar.selectbox("Language / اللغة", ["English", "العربية"])
 is_ar = lang == "العربية"
 st.title("AI-Based Weather Forecast" if not is_ar else "توقع الطقس باستخدام الذكاء الاصطناعي")
 
-import json
-
+# تحميل المدن والدول من ملف JSON
 with open("world_cities_full.json", "r", encoding="utf-8") as f:
-    city_coords = json.load(f),
-    "Turkey": {
-        "Istanbul": (41.0082, 28.9784),
-        "Ankara": (39.9208, 32.8541),
-        "Izmir": (38.4192, 27.1287)
-    },
-    "Egypt": {
-        "Cairo": (30.0444, 31.2357),
-        "Alexandria": (31.2001, 29.9187),
-        "Giza": (30.0131, 31.2089)
-    },
-    "United Kingdom": {
-        "London": (51.5074, -0.1278),
-        "Manchester": (53.4808, -2.2426),
-        "Birmingham": (52.4862, -1.8904)
-    },
-    "UAE": {
-        "Dubai": (25.2048, 55.2708),
-        "Abu Dhabi": (24.4539, 54.3773),
-        "Sharjah": (25.3463, 55.4209)
-    },
-    "India": {
-        "New Delhi": (28.6139, 77.2090),
-        "Mumbai": (19.0760, 72.8777),
-        "Bangalore": (12.9716, 77.5946)
-    },
-    "Jordan": {
-        "Amman": (31.9539, 35.9106),
-        "Irbid": (32.5569, 35.8473),
-        "Zarqa": (32.0728, 36.0880)
-    },
-    "Lebanon": {
-        "Beirut": (33.8938, 35.5018),
-        "Tripoli": (34.4333, 35.8333),
-        "Sidon": (33.5606, 35.3758)
-    },
-    "Morocco": {
-        "Casablanca": (33.5731, -7.5898),
-        "Rabat": (34.0209, -6.8416),
-        "Marrakesh": (31.6295, -7.9811)
-    },
-    "Algeria": {
-        "Algiers": (36.7538, 3.0588),
-        "Oran": (35.6971, -0.6308),
-        "Constantine": (36.3650, 6.6147)
-    },
-    "Qatar": {
-        "Doha": (25.276987, 51.520008)
-    },
-    "Kuwait": {
-        "Kuwait City": (29.3759, 47.9774)
-    },
-    "Oman": {
-        "Muscat": (23.5880, 58.3829)
-    },
-    "Bahrain": {
-        "Manama": (26.2285, 50.5860)
-    }
-}
+    city_coords = json.load(f)
 
+# اختيار الدولة والمدينة
 st.sidebar.markdown("### 🌍 " + ("اختر الدولة والمدينة" if is_ar else "Select Country and City"))
 country = st.sidebar.selectbox("Country / الدولة", list(city_coords.keys()))
 city = st.sidebar.selectbox("City / المدينة", list(city_coords[country].keys()))
 lat, lon = city_coords[country][city]
 
+# اختيار المتغيرات
 st.sidebar.markdown("### 🔧 " + ("ماذا تريد أن يتم التنبؤ به؟" if is_ar else "Select what to predict"))
 all_vars = {
     "🌡️ " + ("Temperature" if not is_ar else "درجة الحرارة"): "temperature",
@@ -90,11 +33,14 @@ all_vars = {
 selected_display = st.sidebar.multiselect("", list(all_vars.keys()), default=list(all_vars.keys()))
 selected_vars = [all_vars[d] for d in selected_display]
 
+# اختيار وحدات القياس
 st.sidebar.markdown("### 🔢 " + ("Select units" if not is_ar else "اختر وحدات القياس"))
 unit_temp = st.sidebar.radio("Temperature", ["C", "F"], index=0)
 unit_wind = st.sidebar.radio("Wind Speed", ["km/h", "m/s"], index=0)
 
+# زر البدء
 if st.sidebar.button("Start Prediction" if not is_ar else "ابدأ التنبؤ"):
+    # جلب البيانات
     start_date = (date.today() - timedelta(days=730)).isoformat()
     end_date = date.today().isoformat()
     api_url = (
@@ -113,6 +59,7 @@ if st.sidebar.button("Start Prediction" if not is_ar else "ابدأ التنبؤ
         "wind_speed": data["hourly"]["windspeed_10m"]
     })
 
+    # معالجة القيم المفقودة
     def fill_with_avg_of_neighbors(series):
         series = series.copy()
         for i in range(1, len(series) - 1):
@@ -124,6 +71,7 @@ if st.sidebar.button("Start Prediction" if not is_ar else "ابدأ التنبؤ
         df[col] = fill_with_avg_of_neighbors(df[col])
         df[col] = df[col].fillna(method="ffill").fillna(method="bfill")
 
+    # تدريب النماذج والتنبؤ
     look_back = 72
     hours_ahead = 24
     forecast_results = {}
@@ -137,7 +85,6 @@ if st.sidebar.button("Start Prediction" if not is_ar else "ابدأ التنبؤ
         X, y = np.array(X), np.array(y)
 
         X_train, _, y_train, _ = train_test_split(X, y, shuffle=False, test_size=0.2)
-
         model = LinearRegression()
         model.fit(X_train, y_train)
 
@@ -150,9 +97,10 @@ if st.sidebar.button("Start Prediction" if not is_ar else "ابدأ التنبؤ
 
         forecast_results[var] = hourly_preds
 
+    # تجهيز بيانات التوقيت والغد
     start_time = datetime.combine(date.today() + timedelta(days=1), datetime.min.time())
     hourly_times = [start_time + timedelta(hours=i) for i in range(hours_ahead)]
-    df_forecast = pd.DataFrame({"Time": hourly_times})
+    df_forecast = pd.DataFrame({ "Time": hourly_times })
 
     if "temperature" in forecast_results:
         temp = forecast_results["temperature"]
@@ -169,6 +117,7 @@ if st.sidebar.button("Start Prediction" if not is_ar else "ابدأ التنبؤ
             wind = [w / 3.6 for w in wind]
         df_forecast[f"Wind Speed ({unit_wind})"] = wind
 
+    # الرسم البياني
     def plot_line_chart(df, column, title):
         fig, ax = plt.subplots()
         ax.plot(df["Time"], df[column], marker='o')
