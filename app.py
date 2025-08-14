@@ -13,10 +13,67 @@ lang = st.sidebar.selectbox("Language / اللغة", ["English", "العربية
 is_ar = lang == "العربية"
 st.title("AI-Based Weather Forecast" if not is_ar else "توقع الطقس باستخدام الذكاء الاصطناعي")
 
-city_coords = {
-    "USA": {"New York": (40.71, -74.01), "Los Angeles": (34.05, -118.24)},
-    "Saudi Arabia": {"Riyadh": (24.7136, 46.6753), "Jeddah": (21.4858, 39.1925)},
-    "Germany": {"Berlin": (52.52, 13.4050), "Munich": (48.1351, 11.5820)}
+import json
+
+with open("world_cities_full.json", "r", encoding="utf-8") as f:
+    city_coords = json.load(f),
+    "Turkey": {
+        "Istanbul": (41.0082, 28.9784),
+        "Ankara": (39.9208, 32.8541),
+        "Izmir": (38.4192, 27.1287)
+    },
+    "Egypt": {
+        "Cairo": (30.0444, 31.2357),
+        "Alexandria": (31.2001, 29.9187),
+        "Giza": (30.0131, 31.2089)
+    },
+    "United Kingdom": {
+        "London": (51.5074, -0.1278),
+        "Manchester": (53.4808, -2.2426),
+        "Birmingham": (52.4862, -1.8904)
+    },
+    "UAE": {
+        "Dubai": (25.2048, 55.2708),
+        "Abu Dhabi": (24.4539, 54.3773),
+        "Sharjah": (25.3463, 55.4209)
+    },
+    "India": {
+        "New Delhi": (28.6139, 77.2090),
+        "Mumbai": (19.0760, 72.8777),
+        "Bangalore": (12.9716, 77.5946)
+    },
+    "Jordan": {
+        "Amman": (31.9539, 35.9106),
+        "Irbid": (32.5569, 35.8473),
+        "Zarqa": (32.0728, 36.0880)
+    },
+    "Lebanon": {
+        "Beirut": (33.8938, 35.5018),
+        "Tripoli": (34.4333, 35.8333),
+        "Sidon": (33.5606, 35.3758)
+    },
+    "Morocco": {
+        "Casablanca": (33.5731, -7.5898),
+        "Rabat": (34.0209, -6.8416),
+        "Marrakesh": (31.6295, -7.9811)
+    },
+    "Algeria": {
+        "Algiers": (36.7538, 3.0588),
+        "Oran": (35.6971, -0.6308),
+        "Constantine": (36.3650, 6.6147)
+    },
+    "Qatar": {
+        "Doha": (25.276987, 51.520008)
+    },
+    "Kuwait": {
+        "Kuwait City": (29.3759, 47.9774)
+    },
+    "Oman": {
+        "Muscat": (23.5880, 58.3829)
+    },
+    "Bahrain": {
+        "Manama": (26.2285, 50.5860)
+    }
 }
 
 st.sidebar.markdown("### 🌍 " + ("اختر الدولة والمدينة" if is_ar else "Select Country and City"))
