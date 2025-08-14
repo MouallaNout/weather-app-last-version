@@ -15,13 +15,19 @@ st.title("AI-Based Weather Forecast" if not is_ar else "توقع الطقس با
 
 import json
 
-with open("world_cities_full.json", "r", encoding="utf-8") as f:
-    city_coords = json.load(f),
-    "Turkey": {
-        "Istanbul": (41.0082, 28.9784),
-        "Ankara": (39.9208, 32.8541),
-        "Izmir": (38.4192, 27.1287)
-    },
+import csv
+
+city_coords = {}
+with open("worldcities.csv", newline='', encoding="utf-8") as csvfile:
+    reader = csv.DictReader(csvfile)
+    for row in reader:
+        country = row["country"]
+        city = row["city"]
+        lat = float(row["lat"])
+        lng = float(row["lng"])
+        if country not in city_coords:
+            city_coords[country] = {}
+        city_coords[country][city] = (lat, lng),
     "Egypt": {
         "Cairo": (30.0444, 31.2357),
         "Alexandria": (31.2001, 29.9187),
