@@ -131,7 +131,7 @@ if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
 
     if "temperature" in forecast_results:
         temp = forecast_results["temperature"]
-        if unit_temp == "°F":
+        if unit_temp == "F°":
             temp = [(t * 9/5) + 32 for t in temp]
         df_forecast[f"Temperature ({unit_temp})"] = temp
 
