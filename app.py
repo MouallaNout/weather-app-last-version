@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 # ================== App ====================
 lang = st.sidebar.selectbox("اللغة / Language", ["English", "العربية"])
 is_ar = lang == "العربية"
-st.title("AI-Based Weather Forecast" if not is_ar else "توقع الطقس باستخدام الذكاء الاصطناعي")
+st.title("Weather forecasting system using machine learning" if not is_ar else " نظام التنبؤ بالطقس باستخدام التعلم الآلي")
 
 city_coords = {}
 with open("worldcities.csv", newline='', encoding="utf-8") as csvfile:
