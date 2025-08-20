@@ -157,7 +157,7 @@ if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
         plt.xticks(rotation=45)
         st.pyplot(fig)
 
-    st.subheader("Hourly Weather Forecast for Tomorrow" if not is_ar else "توقعات الطقس لكل ساعة غدًا")
+    st.subheader("Hourly Weather Forecast for Tomorrow" if not is_ar else "توقعات الطقس لكل ساعة غداً")
     st.markdown(f"{city}, {country}")
     st.markdown(f"{date.today() + timedelta(days=1)}")
 
