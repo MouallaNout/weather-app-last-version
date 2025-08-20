@@ -75,13 +75,17 @@ if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
         except ValueError:
             st.error("الاستجابة من API غير صالحة." if is_ar else "Invalid response from API.")
             st.stop()
-
+    
         df = pd.DataFrame({
             "datetime": pd.to_datetime(data["hourly"]["time"]),
             "temperature": data["hourly"]["temperature_2m"],
             "humidity": data["hourly"]["relative_humidity_2m"],
             "wind_speed": data["hourly"]["windspeed_10m"]
         })
+
+    except Exception as e:
+        st.error("حدث خطأ أثناء تحميل البيانات." if is_ar else f"An error occurred while fetching data: {e}")
+        st.stop()
 
 
     # معالجة القيم المفقودة
