@@ -14,8 +14,6 @@ lang = st.sidebar.selectbox("اللغة / Language", ["English", "العربية
 is_ar = lang == "العربية"
 st.title("AI-Based Weather Forecast" if not is_ar else "توقع الطقس باستخدام الذكاء الاصطناعي")
 
-#import json
-
 city_coords = {}
 with open("worldcities.csv", newline='', encoding="utf-8") as csvfile:
     reader = csv.DictReader(csvfile)
