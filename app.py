@@ -5,6 +5,8 @@ import numpy as np
 import requests
 import pickle
 from datetime import date, timedelta, datetime
+from astral import LocationInfo
+from astral.sun import sun
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
@@ -12,8 +14,9 @@ import matplotlib.pyplot as plt
 # ================== App ====================
 lang = st.sidebar.selectbox("اللغة / Language", ["English", "العربية"])
 is_ar = lang == "العربية"
-st.title("Weather forecasting system using machine learning" if not is_ar else " نظام التنبؤ بالطقس باستخدام التعلم الآلي")
+st.title("Weather forecasting system using machine learning" if not is_ar else "نظام التنبؤ بالطقس باستخدام التعلم الآلي")
 
+# تحميل بيانات المدن
 city_coords = {}
 with open("worldcities.csv", newline='', encoding="utf-8") as csvfile:
     reader = csv.DictReader(csvfile)
@@ -52,7 +55,7 @@ unit_wind = st.sidebar.radio(
     index=0
 )
 
-# بدء جلب البيانات
+# ================== جلب البيانات ====================
 if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
     start_date = (date.today() - timedelta(days=730)).isoformat()
     end_date = date.today().isoformat()
@@ -73,7 +76,7 @@ if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
         except ValueError:
             st.error("الاستجابة من API غير صالحة." if is_ar else "Invalid response from API.")
             st.stop()
-    
+
         df = pd.DataFrame({
             "datetime": pd.to_datetime(data["hourly"]["time"]),
             "temperature": data["hourly"]["temperature_2m"],
@@ -84,7 +87,6 @@ if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
     except Exception as e:
         st.error("حدث خطأ أثناء تحميل البيانات." if is_ar else f"An error occurred while fetching data: {e}")
         st.stop()
-
 
     # معالجة القيم المفقودة
     def fill_with_avg_of_neighbors(series):
@@ -98,71 +100,49 @@ if st.sidebar.button("ابدأ التنبؤ" if is_ar else "Start Prediction"):
         df[col] = fill_with_avg_of_neighbors(df[col])
         df[col] = df[col].fillna(method="ffill").fillna(method="bfill")
 
-    # تدريب النماذج والتنبؤ
-    look_back = 72
-    hours_ahead = 24
-    forecast_results = {}
+    # ================== حساب أوقات الشروق والغروب ====================
+    city_info = LocationInfo(city, country, "America/New_York", lat, lon)
+    selected_day = date.today() + timedelta(days=1)
+    sun_times = sun(city_info.observer, date=selected_day, tzinfo=city_info.timezone)
 
-    for var in selected_vars:
-        X, y = [], []
-        data_arr = df[[var]].values
-        for i in range(len(data_arr) - look_back):
-            X.append(data_arr[i:i+look_back].flatten())
-            y.append(data_arr[i+look_back][0])
-        X, y = np.array(X), np.array(y)
+    sunrise_hour = sun_times["sunrise"].hour
+    sunset_hour = sun_times["sunset"].hour
 
-        X_train, _, y_train, _ = train_test_split(X, y, shuffle=False, test_size=0.2)
-        model = LinearRegression()
-        model.fit(X_train, y_train)
+    # ================== تقسيم اليوم إلى نهار وليل ====================
+    daytime_data = df[(df["datetime"].dt.hour >= sunrise_hour) & (df["datetime"].dt.hour < sunset_hour)]
+    nighttime_data = df[(df["datetime"].dt.hour < sunrise_hour) | (df["datetime"].dt.hour >= sunset_hour)]
 
-        current_sequence = df[[var]].values[-look_back:].flatten().reshape(1, -1)
-        hourly_preds = []
-        for _ in range(hours_ahead):
-            pred = model.predict(current_sequence)[0]
-            hourly_preds.append(pred)
-            current_sequence = np.append(current_sequence[:, 1:], [[pred]], axis=1)
+    # ================== حساب المتوسطات ====================
+    day_avg_temp = daytime_data["temperature"].mean()
+    night_avg_temp = nighttime_data["temperature"].mean()
 
-        forecast_results[var] = hourly_preds
+    day_avg_wind = daytime_data["wind_speed"].mean()
+    night_avg_wind = nighttime_data["wind_speed"].mean()
 
-    # تجهيز بيانات التوقيت والغد
-    start_time = datetime.combine(date.today() + timedelta(days=1), datetime.min.time())
-    hourly_times = [start_time + timedelta(hours=i) for i in range(hours_ahead)]
-    df_forecast = pd.DataFrame({ "Time": hourly_times })
+    day_avg_humidity = daytime_data["humidity"].mean()
+    night_avg_humidity = nighttime_data["humidity"].mean()
 
-    if "temperature" in forecast_results:
-        temp = forecast_results["temperature"]
-        if unit_temp == "°F":
-            temp = [(t * 9/5) + 32 for t in temp]
-        df_forecast[f"Temperature ({unit_temp})"] = temp
+    # ================== عرض المتوسطات ====================
+    st.subheader("متوسطات الطقس لليوم التالي")
+    st.markdown(f"**متوسط درجة الحرارة في النهار**: {day_avg_temp:.2f}°C")
+    st.markdown(f"**متوسط درجة الحرارة في الليل**: {night_avg_temp:.2f}°C")
+    st.markdown(f"**متوسط سرعة الرياح في النهار**: {day_avg_wind:.2f} {unit_wind}")
+    st.markdown(f"**متوسط سرعة الرياح في الليل**: {night_avg_wind:.2f} {unit_wind}")
+    st.markdown(f"**متوسط الرطوبة في النهار**: {day_avg_humidity:.2f}%")
+    st.markdown(f"**متوسط الرطوبة في الليل**: {night_avg_humidity:.2f}%")
 
-    if "humidity" in forecast_results:
-        df_forecast["Humidity (%)"] = forecast_results["humidity"]
+    # ================== رسم بياني ====================
+    plt.figure(figsize=(12, 6))
+    plt.plot(df["datetime"].dt.hour, df["temperature"], marker="o", label="Hourly Temperature")
+    plt.axhline(y=day_avg_temp, color="orange", linestyle="--", label=f"Day Avg Temp = {day_avg_temp:.2f}°C")
+    plt.axhline(y=night_avg_temp, color="blue", linestyle="--", label=f"Night Avg Temp = {night_avg_temp:.2f}°C")
+    plt.title(f"Temperature for {selected_day}")
+    plt.xlabel("Hour of the Day")
+    plt.ylabel("Temperature (°C)")
+    plt.grid(True, linestyle="--", alpha=0.7)
+    plt.xticks(range(24))
+    plt.legend()
+    st.pyplot()
 
-    if "wind_speed" in forecast_results:
-        wind = forecast_results["wind_speed"]
-        if unit_wind == "m/s":
-            wind = [w / 3.6 for w in wind]
-        df_forecast[f"Wind Speed ({unit_wind})"] = wind
-
-    # الرسم البياني
-    def plot_line_chart(df, column, title):
-        fig, ax = plt.subplots()
-        ax.plot(df["Time"], df[column], marker='o')
-        ax.set_title(title)
-        ax.set_xlabel("Time")
-        ax.set_ylabel(column)
-        ax.grid(True)
-        plt.xticks(rotation=45)
-        st.pyplot(fig)
-
-    st.subheader("Hourly Weather Forecast for Tomorrow" if not is_ar else "توقعات الطقس لكل ساعة غداً")
-    st.markdown(f"{city}, {country}")
-    st.markdown(f"{date.today() + timedelta(days=1)}")
-
-    for col in df_forecast.columns:
-        if col != "Time":
-            label = col.split(" (")[0]
-            title = label if is_ar else f"{label} Throughout the Day"
-            plot_line_chart(df_forecast, col, title)
-
-    st.dataframe(df_forecast.style.format(precision=1))
+    # ================== عرض البيانات ====================
+    st.dataframe(df.style.format(precision=1))
