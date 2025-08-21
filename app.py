@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 # ================== App ====================
 lang = st.sidebar.selectbox("اللغة / Language", ["English", "العربية"])
 is_ar = lang == "العربية"
-st.title("Weather forecasting system using machine learning" if not is_ar else "نظام التنبؤ بالطقس باستخدام التعلم الآلي")
+st.title("Weather forecasting app using machine learning" if not is_ar else "تطبيق التنبؤ بالطقس باستخدام التعلم الآلي")
 
 # تحميل بيانات المدن
 city_coords = {}
